@@ -804,6 +804,7 @@
             
             validacaoEmAndamento = true;
             isPausadoManual = false;
+            let validacaoCancelada = false;
             travarInterface(true);
 
             document.getElementById('statusContainer').style.display = 'block';
@@ -819,49 +820,33 @@
             const total = linhas.length;
             let tempoInicio = Date.now();
             let limiteAtingido = false;
+            let validadosConcluidos = 0;
 
-            for (let i = 0; i < total; i++) {
+            const TAMANHO_LOTE = 3;
+
+            async function processarItem(i) {
+                if (limiteAtingido || validacaoCancelada) return;
+
                 let linha = linhas[i];
                 let ean = filaDeInjecao[i].eanGerado; 
                 let celulaStatus = linha.querySelector('td:nth-child(3)');
 
-                while (isPausadoManual) {
-                    await new Promise(r => setTimeout(r, 500));
-                    tempoInicio += 500; 
-                }
-
                 if (isModoOfflineRisk) {
                     filaDeInjecao[i].statusValidacao = 'offline';
                     celulaStatus.innerHTML = `<span class="badge badge-offline">✅ Aprovado</span>`;
-                    if (i === total - 1) {
-                        progresso.innerText = `Geração Concluída com Sucesso!`;
-                        timer.innerText = "✅ Finalizado!";
-                        conclusao.innerText = "-";
-                        validacaoEmAndamento = false;
-                        travarInterface(false);
-                        document.getElementById('btnPausar').style.display = 'none';
-                        return;
-                    }
-                    continue;
+                    validadosConcluidos++;
+                    return;
                 }
 
-                let tempoPassado = (Date.now() - tempoInicio) / 1000;
-                let media = i > 0 ? tempoPassado / i : 1.5; 
-                let segsRestantes = (total - i) * media;
-
-                timer.innerText = `⏱️ Restante: ${formatarTempo(segsRestantes)}`;
-                conclusao.innerText = formatarHoraConclusao(segsRestantes);
-                progresso.innerText = `Validando no Banco: ${i + 1} de ${total}`;
-                
-                linha.scrollIntoView({ behavior: "smooth", block: "center" });
+                if (i % TAMANHO_LOTE === 0) linha.scrollIntoView({ behavior: "smooth", block: "center" });
                 celulaStatus.innerHTML = `<span class="badge" style="background:#e0f2fe; color:#0284c7;">Buscando...</span>`;
 
                 let processado = false;
-                while (!processado) {
+                while (!processado && !validacaoCancelada && !limiteAtingido) {
                     while (isPausadoManual) {
                         await new Promise(r => setTimeout(r, 500));
-                        tempoInicio += 500; 
                     }
+                    if (validacaoCancelada || limiteAtingido) break;
 
                     try {
                         const controller = new AbortController();
@@ -893,9 +878,11 @@
                             processado = true; 
                         } 
                         else if (res.status === 429) {
-                            for(let j = i; j < total; j++) {
-                                filaDeInjecao[j].statusValidacao = 'offline';
-                                linhas[j].querySelector('td:nth-child(3)').innerHTML = `<span class="badge badge-offline">✅ Aprovado (Limite API)</span>`;
+                            for(let j = validadosConcluidos; j < total; j++) {
+                                if(filaDeInjecao[j].statusValidacao !== 'aprovado' && filaDeInjecao[j].statusValidacao !== 'em_uso') {
+                                    filaDeInjecao[j].statusValidacao = 'offline';
+                                    linhas[j].querySelector('td:nth-child(3)').innerHTML = `<span class="badge badge-offline">✅ Aprovado (Limite API)</span>`;
+                                }
                             }
                             processado = true;
                             limiteAtingido = true;
@@ -912,33 +899,73 @@
                             processado = true;
                         } else {
                             celulaStatus.innerHTML = `<span class="badge badge-erro">🛑 Pausado</span>`;
-                            let mensagemQueda = "A extensão 'Allow CORS' foi desativada durante a validação ou sua internet caiu.\n\n1. Verifique sua conexão.\n2. Ative a extensão (C: ON) no topo do navegador.\n3. Clique no botão abaixo para retomar.";
                             
-                            let retomar = await uiConfirmAsync("Conexão Interrompida ⚠️", mensagemQueda, "✅ Já ativei, retomar!");
-                            
-                            if (retomar) {
-                                celulaStatus.innerHTML = `<span class="badge badge-buscando">🔄 Retomando...</span>`;
+                            if (!isPausadoManual && !validacaoCancelada) {
+                                alternarPausa(); 
+                                let mensagemQueda = "A extensão 'Allow CORS' foi desativada ou a internet caiu.\n\n1. Verifique a conexão.\n2. Ative a extensão (C: ON).\n3. Clique abaixo para retomar.";
+                                
+                                let retomar = await uiConfirmAsync("Conexão Interrompida ⚠️", mensagemQueda, "✅ Já ativei, retomar!");
+                                
+                                if (retomar) {
+                                    alternarPausa(); 
+                                } else {
+                                    validacaoCancelada = true;
+                                }
                             } else {
-                                validacaoEmAndamento = false;
-                                travarInterface(false);
-                                document.getElementById('btnPausar').style.display = 'none';
-                                progresso.innerText = "Processo Cancelado pelo Usuário.";
-                                timer.innerText = "-";
-                                conclusao.innerText = "-";
-                                return; 
+                                while (isPausadoManual && !validacaoCancelada) {
+                                    await new Promise(r => setTimeout(r, 500));
+                                }
                             }
+                            
+                            if(!validacaoCancelada) celulaStatus.innerHTML = `<span class="badge badge-buscando">🔄 Retomando...</span>`;
                         }
                     }
                 } 
+                validadosConcluidos++;
+            }
 
-                if (limiteAtingido) {
-                    progresso.innerText = "Validação Concluída! (Cota da API Atingida)";
-                    break; 
+            for (let i = 0; i < total; i += TAMANHO_LOTE) {
+                if (validacaoCancelada || limiteAtingido) break;
+
+                while (isPausadoManual) {
+                    await new Promise(r => setTimeout(r, 500));
+                    tempoInicio += 500; 
                 }
-                await new Promise(r => setTimeout(r, 1000)); 
+
+                let tempoPassado = (Date.now() - tempoInicio) / 1000;
+                let media = validadosConcluidos > 0 ? tempoPassado / validadosConcluidos : 1.5; 
+                let segsRestantes = (total - validadosConcluidos) * media;
+
+                timer.innerText = `⏱️ Restante: ${formatarTempo(segsRestantes)}`;
+                conclusao.innerText = formatarHoraConclusao(segsRestantes);
+                progresso.innerText = `Validando no Banco: ${Math.min(i + TAMANHO_LOTE, total)} de ${total}`;
+
+                let lote = [];
+                for (let j = i; j < i + TAMANHO_LOTE && j < total; j++) {
+                    lote.push(processarItem(j));
+                }
+
+                await Promise.all(lote); 
+
+                if (isModoOfflineRisk && validadosConcluidos >= total) break;
+
+                await new Promise(r => setTimeout(r, 800)); 
             }
             
-            if(!limiteAtingido) progresso.innerText = "Validação Concluída! Pode baixar a planilha.";
+            if (validacaoCancelada) {
+                progresso.innerText = "Processo Cancelado pelo Usuário.";
+                timer.innerText = "-";
+                conclusao.innerText = "-";
+            } else if (limiteAtingido) {
+                progresso.innerText = "Validação Concluída! (Cota da API Atingida)";
+                timer.innerText = "✅ Finalizado!";
+                conclusao.innerText = "-";
+            } else {
+                progresso.innerText = "Validação Concluída! Pode baixar a planilha.";
+                timer.innerText = "✅ Finalizado!";
+                conclusao.innerText = "-";
+            }
+
             validacaoEmAndamento = false;
             travarInterface(false);
             document.getElementById('btnPausar').style.display = 'none';
@@ -948,7 +975,7 @@
             if(!originalWorkbook || filaDeInjecao.length === 0) return;
 
             let eansValidados = [];
-            let logConteudo = "ID_Produto\tID_Variante\tEAN_Atribuido\n"; // NOVO: Cabeçalho do Log de Auditoria
+            let logConteudo = "ID_Produto\tID_Variante\tEAN_Atribuido\n"; 
             let possuiErro = false;
 
             filaDeInjecao.forEach(item => {
@@ -957,9 +984,7 @@
                 }
                 if (item.statusValidacao === 'aprovado' || item.statusValidacao === 'offline') {
                     eansValidados.push(item.eanGerado);
-                    // Injeta na planilha direto da memória
                     originalWorksheet.getCell(item.rowNum, shopeeGtinColNumber).value = String(item.eanGerado);
-                    // Alimenta o Log
                     logConteudo += `${item.idProd}\t${item.idVar}\t${item.eanGerado}\n`;
                 }
             });
@@ -967,7 +992,6 @@
             if (possuiErro) return uiAlert("Atenção", "Códigos 'Em Uso' foram encontrados.\nPor favor, altere o Código Base e gere novamente.");
             if (eansValidados.length < filaDeInjecao.length) return uiAlert("Atenção", "Você precisa validar a lista completa antes de baixar o arquivo.");
 
-            // NOVO: Atualiza o Cofre da Loja Ativa em vez da memória geral
             const ultimoEan = eansValidados[eansValidados.length - 1];
             bancoLojas[lojaAtivaId].ultimoEan = ultimoEan;
             bancoLojas[lojaAtivaId].base12 = ultimoEan.substring(0, 12);
@@ -982,7 +1006,6 @@
 
             let nomeFinal = prefixo + originalFileName;
 
-            // NOVO: Baixa o Recibo (Log TXT)
             const blobLog = new Blob([logConteudo], { type: 'text/plain' });
             const linkLog = document.createElement("a");
             linkLog.href = URL.createObjectURL(blobLog);
@@ -991,7 +1014,6 @@
             linkLog.click();
             document.body.removeChild(linkLog);
 
-            // Baixa o Excel
             const buffer = await originalWorkbook.xlsx.writeBuffer();
             const link = document.createElement("a");
             link.href = URL.createObjectURL(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));

@@ -305,7 +305,7 @@
             <div class="linha-botoes" id="hl-botoes">
                 <button class="btn-gerar" onclick="gerarTabela()" data-tooltip="Cria a lista de EANs calculados na tabela abaixo.">⚙️ 3. Gerar Lista</button>
                 <button class="btn-verificar" onclick="verificarNoBanco()" data-tooltip="Checa no banco Cosmos se os EANs estão 100% livres.">🔎 4. Validar Cosmos</button>
-                <button class="btn-exportar" onclick="exportarPlanilha()" data-tooltip="Injeta os EANs, baixa a planilha e gera o Log de Auditoria.">📥 5. Salvar e Baixar</button>
+                <button class="btn-exportar" onclick="exportarPlanilha()" data-tooltip="Injeta os EANs, baixa a planilha principal e depois gera o Log de Auditoria.">📥 5. Salvar e Baixar</button>
             </div>
         </div>
 
@@ -459,6 +459,16 @@
         let baseAutoDetectada = "";
         let fonteBaseAtual = "manual"; 
 
+        // Inteligência para definir a base e não sumir com os zeros da criação da loja
+        function obterBaseParaInput(loja) {
+            if (loja.ultimoEan && loja.base12) {
+                return (BigInt(loja.base12) + 1n).toString().padStart(12, '0');
+            } else if (loja.prefixoLoja) {
+                return loja.prefixoLoja.padEnd(12, '0');
+            }
+            return "";
+        }
+
         function carregarCofreLojas() {
             const salvo = localStorage.getItem('ean_master_lojas');
             if (salvo) {
@@ -479,13 +489,8 @@
             atualizarSelectLojas();
             atualizarUI_Memoria();
             
-            // Força configuração inicial da base do input
             const loja = bancoLojas[lojaAtivaId];
-            if (loja.base12) {
-                document.getElementById('codigoBase').value = (BigInt(loja.base12) + 1n).toString().padStart(12, '0');
-            } else if (loja.prefixoLoja) {
-                document.getElementById('codigoBase').value = loja.prefixoLoja.padEnd(12, '0');
-            }
+            document.getElementById('codigoBase').value = obterBaseParaInput(loja);
             validarPrefixoGS1();
         }
 
@@ -506,27 +511,24 @@
             }
         }
 
+        // Função Clean State para garantir que nada de outra loja permaneça no visor
         function limparWorkspace() {
-            // 1. Limpa o ficheiro importado
             document.getElementById('fileUpload').value = "";
             originalWorkbook = null;
             originalWorksheet = null;
             
-            // 2. Esconde e zera o Dashboard
             document.getElementById('dashResumo').style.display = 'none';
             document.getElementById('rxTotal').innerText = "0";
             document.getElementById('rxOk').innerText = "0";
             document.getElementById('rxVazios').innerText = "0";
             document.getElementById('rxDuplicados').innerText = "0";
             
-            // 3. Limpa as arrays e a tabela visual
             todosProdutos = [];
             filaDeInjecao = [];
             setEansExistentesGlobal.clear();
             document.getElementById('corpoTabela').innerHTML = "";
             document.getElementById('qtdGerar').value = "0";
             
-            // 4. Reset do status
             document.getElementById('statusContainer').style.display = 'none';
             baseAutoDetectada = "";
         }
@@ -534,17 +536,11 @@
         function trocarLoja(silencioso = false) {
             lojaAtivaId = document.getElementById('selectLoja').value;
             salvarCofreLojas();
-            limparWorkspace(); // CLEAN STATE
+            limparWorkspace(); 
             atualizarUI_Memoria();
             
             const loja = bancoLojas[lojaAtivaId];
-            if (loja.base12) {
-                document.getElementById('codigoBase').value = (BigInt(loja.base12) + 1n).toString().padStart(12, '0');
-            } else if (loja.prefixoLoja) {
-                document.getElementById('codigoBase').value = loja.prefixoLoja.padEnd(12, '0');
-            } else {
-                document.getElementById('codigoBase').value = "";
-            }
+            document.getElementById('codigoBase').value = obterBaseParaInput(loja);
             
             fonteBaseAtual = "manual";
             validarPrefixoGS1();
@@ -556,27 +552,32 @@
             const nome = prompt("Digite um nome para a nova Loja ou Perfil:");
             if (!nome || nome.trim() === "") return;
             
-            const baseCnpj = prompt("Configuração Inicial:\nDigite o prefixo base da loja (Padrão: 789 + 5 primeiros dígitos do CNPJ).\nEx: 78912345");
+            let baseCnpj = prompt("Configuração Inicial:\nDigite o prefixo base da loja (Apenas Números. Padrão: 789 + 5 primeiros dígitos do CNPJ).\nEx: 78912345");
             
-            if (baseCnpj && baseCnpj.length >= 8 && !isNaN(baseCnpj)) {
-                const id = 'loja_' + Date.now();
-                bancoLojas[id] = { 
-                    nome: nome.trim(), 
-                    prefixoLoja: baseCnpj, 
-                    ultimoEan: null, 
-                    base12: baseCnpj.padEnd(12, '0') 
-                };
-                lojaAtivaId = id;
-                salvarCofreLojas();
-                atualizarSelectLojas();
-                trocarLoja(true);
-            } else {
-                uiAlert("Erro", "A base precisa ser numérica e ter pelo menos 8 dígitos.");
+            if (baseCnpj) {
+                // Remove qualquer letra ou espaço que o usuário digite
+                baseCnpj = baseCnpj.replace(/\D/g, ''); 
+
+                if (baseCnpj.length >= 8 && baseCnpj.length <= 12) {
+                    const id = 'loja_' + Date.now();
+                    bancoLojas[id] = { 
+                        nome: nome.trim(), 
+                        prefixoLoja: baseCnpj, 
+                        ultimoEan: null, 
+                        base12: null // Se for null ele respeita o 0000 no input
+                    };
+                    lojaAtivaId = id;
+                    salvarCofreLojas();
+                    atualizarSelectLojas();
+                    trocarLoja(true);
+                } else {
+                    uiAlert("Erro na Base", "A base precisa conter entre 8 e 12 NÚMEROS. Letras e caracteres especiais são proibidos.");
+                }
             }
         }
 
         function editarLoja() {
-            if (lojaAtivaId === 'default') return uiAlert("Ação Bloqueada", "A Loja Principal padrão não pode ser renomeada.");
+            // Removida a trava de edição da loja default, permitindo trocar o nome!
             const lojaAtual = bancoLojas[lojaAtivaId];
             const novoNome = prompt("Digite o novo nome para a loja:", lojaAtual.nome);
             if (novoNome && novoNome.trim() !== "") {
@@ -588,7 +589,7 @@
 
         function excluirLoja() {
             if (lojaAtivaId === 'default') {
-                return uiAlert("Ação Bloqueada", "A Loja Principal não pode ser excluída, pois é o perfil padrão do sistema.");
+                return uiAlert("Ação Bloqueada", "A Loja Principal padrão do sistema não pode ser excluída, mas você pode renomeá-la clicando no botão ✏️ ao lado.");
             }
             uiAlert("Excluir Loja", `Tem certeza que deseja excluir o perfil <b>${bancoLojas[lojaAtivaId].nome}</b>?\nTodo o histórico de EANs desta loja será perdido.`, true, () => {
                 delete bancoLojas[lojaAtivaId];
@@ -617,18 +618,17 @@
         }
 
         function limparMemoriaInterna() {
-            uiAlert("Limpar Memória da Loja", `Tem certeza que deseja apagar o contador da loja <b>${bancoLojas[lojaAtivaId].nome}</b>?\nUse isso apenas se quiser recomeçar a sequência desta loja do zero.`, true, () => {
+            uiAlert("Limpar Memória da Loja", `Tem certeza que deseja apagar o histórico da loja <b>${bancoLojas[lojaAtivaId].nome}</b>?\nUse isso apenas se quiser recomeçar a sequência desta loja do zero.`, true, () => {
                 const loja = bancoLojas[lojaAtivaId];
                 loja.ultimoEan = null;
-                // Volta para o prefixo zerado se existir
-                loja.base12 = loja.prefixoLoja ? loja.prefixoLoja.padEnd(12, '0') : null;
+                loja.base12 = null; 
                 
                 salvarCofreLojas();
                 atualizarUI_Memoria();
-                document.getElementById('codigoBase').value = loja.base12 || "";
+                document.getElementById('codigoBase').value = obterBaseParaInput(loja);
                 fonteBaseAtual = "manual";
                 validarPrefixoGS1();
-                uiAlert("Pronto", "Memória da loja limpa com sucesso!");
+                uiAlert("Pronto", "Memória da loja limpa com sucesso! O contador voltará ao início (0000).");
             });
         }
 
@@ -642,7 +642,7 @@
                 const loja = bancoLojas[lojaAtivaId];
                 
                 if (loja.prefixoLoja && !val.startsWith(loja.prefixoLoja)) {
-                    aviso.innerHTML = `⚠️ Atenção: A base difere do prefixo da loja (${loja.prefixoLoja}).`;
+                    aviso.innerHTML = `⚠️ Atenção: A base difere do prefixo original cadastrado para a loja (${loja.prefixoLoja}).`;
                     aviso.style.color = "#d97706"; 
                 } else if (!val.startsWith('789') && !val.startsWith('790')) {
                     aviso.innerHTML = "⚠️ Atenção: Padrão GS1 Brasil costuma iniciar com 789 ou 790.";
@@ -671,7 +671,7 @@
 
             if (modo === 'todos') {
                 if (fonteBaseAtual === 'auto') {
-                    inputBase.value = loja.base12 ? (BigInt(loja.base12) + 1n).toString().padStart(12, '0') : (loja.prefixoLoja ? loja.prefixoLoja.padEnd(12, '0') : "");
+                    inputBase.value = obterBaseParaInput(loja);
                     fonteBaseAtual = "manual";
                     validarPrefixoGS1();
                     uiAlert("Mudança de Estratégia", "Como você escolheu 'Substituir Tudo', a base lida da planilha foi trocada pela memória da loja para garantir uma sequência limpa e nova.");
@@ -771,15 +771,12 @@
 
                 const loja = bancoLojas[lojaAtivaId];
 
-                // Lógica de inteligência de detecção baseada no Prefixo da Loja
                 if (loja.prefixoLoja) {
                     let prefixInt = BigInt(loja.prefixoLoja.padEnd(12, '0'));
                     if (maxBaseDetectada >= prefixInt && String(maxBaseDetectada).startsWith(loja.prefixoLoja)) {
                         baseAutoDetectada = (maxBaseDetectada + 1n).toString().padStart(12, '0');
-                    } else if (loja.base12) {
-                        baseAutoDetectada = (BigInt(loja.base12) + 1n).toString().padStart(12, '0');
                     } else {
-                        baseAutoDetectada = loja.prefixoLoja.padEnd(12, '0');
+                        baseAutoDetectada = obterBaseParaInput(loja);
                     }
                     document.getElementById('codigoBase').value = baseAutoDetectada;
                     fonteBaseAtual = "auto";
@@ -825,7 +822,7 @@
             return `Término previsto: ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
         }
 
-        // MOTOR CENTRAL DE DISTRIBUIÇÃO - Evita Condição de Corrida (Race Condition)
+        // MOTOR CENTRAL DE DISTRIBUIÇÃO - Evita Condição de Corrida
         function obterProximoEanLivre() {
             let eanValido = false;
             let novoEan = "";
@@ -837,7 +834,6 @@
                 
                 sequenciaGlobalAtual++; 
                 
-                // Reserva imediata: Impede que outro processo concorrente pegue este EAN
                 if (!setEansExistentesGlobal.has(novoEan)) {
                     setEansExistentesGlobal.add(novoEan);
                     eanValido = true;
@@ -852,18 +848,17 @@
             if (filaDeInjecao.length === 0) return uiAlert("Atenção", "Não há produtos na fila para a regra selecionada.\nVerifique a planilha ou altere o Modo de Correção.");
             
             let base = document.getElementById('codigoBase').value.replace(/\D/g, '');
-            if (base.length !== 12) return uiAlert("Formato Incorreto", "O Código Base precisa ter exatamente 12 números (Prefixo da Loja).");
+            if (base.length !== 12) return uiAlert("Formato Incorreto", "O Código Base precisa ter exatamente 12 números (Prefixo da Loja + Sequência).");
 
             document.getElementById('statusContainer').style.display = 'none';
             tbody.innerHTML = ""; 
             
-            // Inicializa a Trava Central com a Base atual
             sequenciaGlobalAtual = BigInt(base);
             let fragment = document.createDocumentFragment();
 
             filaDeInjecao.forEach((item, i) => {
                 
-                let ean = obterProximoEanLivre(); // Pede um EAN seguro e único à Trava Central
+                let ean = obterProximoEanLivre(); 
                 
                 item.eanGerado = ean;
                 item.statusValidacao = 'pendente';
@@ -968,7 +963,6 @@
                         clearTimeout(timeoutId);
 
                         if (res.status === 200) { 
-                            // EAN EM USO: Pede um NOVO número à Trava Central
                             ean = obterProximoEanLivre();
                             
                             filaDeInjecao[i].eanGerado = ean; 
@@ -1111,23 +1105,28 @@
 
             let nomeFinal = prefixo + originalFileName;
 
-            const blobLog = new Blob([logConteudo], { type: 'text/plain' });
-            const linkLog = document.createElement("a");
-            linkLog.href = URL.createObjectURL(blobLog);
-            linkLog.download = `LOG_${nomeFinal.replace('.xlsx', '.txt')}`;
-            document.body.appendChild(linkLog);
-            linkLog.click();
-            document.body.removeChild(linkLog);
-
+            // 1. GERA E BAIXA O EXCEL PRIMEIRO (Para não ser barrado)
             const buffer = await originalWorkbook.xlsx.writeBuffer();
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-            link.download = nomeFinal;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            const linkExcel = document.createElement("a");
+            linkExcel.href = URL.createObjectURL(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+            linkExcel.download = nomeFinal;
+            document.body.appendChild(linkExcel);
+            linkExcel.click();
+            document.body.removeChild(linkExcel);
 
-            uiAlert("🎉 ARQUIVOS SALVOS!", `A planilha e o Log de Auditoria foram baixados!\n\nCOMO ENVIAR PARA A SHOPEE:\n1. Acesse <b>Ações em Massa > Editar em Massa</b>.\n2. Clique na aba <b>'Envio'</b>.\n3. Envie a planilha gerada e aguarde a conclusão!`);
+            // 2. EXIBE AVISO QUE PAUSA A ATENÇÃO DO USUÁRIO
+            uiAlert("🎉 PLANILHA BAIXADA COM SUCESSO!", `A sua planilha Excel já foi gerada e transferida.\n\n⚠️ Atenção: O navegador pode pedir a sua permissão (no canto superior direito) para baixar múltiplos arquivos e gerar o seu Log de Auditoria em formato .txt.\n\nPor favor, clique em <b>"Permitir"</b> caso o aviso apareça.\n\nCOMO ENVIAR PARA A SHOPEE:\n1. Acesse <b>Ações em Massa > Editar em Massa</b>.\n2. Clique na aba <b>'Envio'</b>.\n3. Envie a planilha gerada e aguarde a conclusão!`);
+
+            // 3. ATRASA O TXT (Assim não conta como spam de download simultâneo)
+            setTimeout(() => {
+                const blobLog = new Blob([logConteudo], { type: 'text/plain' });
+                const linkLog = document.createElement("a");
+                linkLog.href = URL.createObjectURL(blobLog);
+                linkLog.download = `LOG_${nomeFinal.replace('.xlsx', '.txt')}`;
+                document.body.appendChild(linkLog);
+                linkLog.click();
+                document.body.removeChild(linkLog);
+            }, 1500);
         }
     </script>
 </body>

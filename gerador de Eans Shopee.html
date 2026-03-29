@@ -69,8 +69,8 @@
         .input-token:focus { border-color: var(--shopee-laranja); box-shadow: 0 0 0 3px rgba(238, 77, 45, 0.1); }
 
         .painel-memoria { background: #eef2ff; border-left: 5px solid #6366f1; padding: 15px 20px; border-radius: 8px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;}
-        .seletor-loja { flex: 1; min-width: 250px; display: flex; align-items: center; gap: 10px; }
-        .seletor-loja select { flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid #c7d2fe; outline: none; font-size: 14px; background: white; color: #312e81; font-weight: bold; cursor: pointer;}
+        .seletor-loja { flex: 1; min-width: 300px; display: flex; align-items: center; gap: 8px; }
+        .seletor-loja select { flex: 1; padding: 10px 12px; border-radius: 6px; border: 1px solid #c7d2fe; outline: none; font-size: 14px; background: white; color: #312e81; font-weight: bold; cursor: pointer;}
         .memoria-detalhes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;}
         .memoria-texto { font-size: 13px; color: #312e81; white-space: nowrap;}
         .memoria-destaque { font-family: monospace; font-size: 16px; font-weight: bold; background: white; padding: 4px 10px; border-radius: 6px; border: 1px solid #c7d2fe; white-space: nowrap;}
@@ -220,14 +220,15 @@
             <div class="seletor-loja">
                 <div class="memoria-texto">🏢 <b>Loja Ativa:</b></div>
                 <select id="selectLoja" onchange="trocarLoja()">
-                    <option value="default">Loja Principal</option>
                 </select>
-                <button class="btn-top" onclick="criarNovaLoja()" style="padding: 6px 10px;" data-tooltip="Criar um novo perfil de loja com contador independente.">➕ Nova</button>
+                <button class="btn-top" onclick="criarNovaLoja()" style="padding: 6px 10px;" data-tooltip="Criar um novo perfil de loja.">➕ Nova</button>
+                <button class="btn-top" onclick="editarLojaAtiva()" style="padding: 6px 10px;" data-tooltip="Editar nome ou prefixo da loja selecionada.">✏️</button>
+                <button class="btn-top btn-perigo" onclick="excluirLojaAtiva()" style="padding: 6px 10px;" data-tooltip="Excluir este perfil de loja permanentemente.">🗑️</button>
             </div>
             <div class="memoria-detalhes">
                 <div class="memoria-texto">Último EAN da Loja:</div>
                 <div class="memoria-destaque" id="txtUltimoEan">Nenhum registro</div>
-                <button class="btn-top btn-perigo" onclick="limparMemoriaInterna()" data-tooltip="Apaga o último EAN salvo para você começar uma nova sequência do zero, sem conflitos.">🗑️ Limpar</button>
+                <button class="btn-top btn-perigo" onclick="limparMemoriaInterna()" data-tooltip="Apaga o contador da sequência desta loja.">🗑️ Limpar Seq.</button>
             </div>
         </div>
 
@@ -277,16 +278,16 @@
 
             <div class="linha-inputs" id="hl-base">
                 <div class="grupo-input">
-                    <label>Passo 2: Código Base (Prefixo):</label>
-                    <input type="text" id="codigoBase" placeholder="Ex: 789000000000" maxlength="12" oninput="atualizarContador(true)" data-tooltip="Siga o padrão GS1 global.">
+                    <label>Passo 2: Código Base Ativo:</label>
+                    <input type="text" id="codigoBase" placeholder="Clique em Sincronizar" maxlength="12" disabled style="background:#f1f5f9;">
                     <div class="aviso-gs1" id="avisoGS1"></div>
                     <div class="dica-input">
-                        Padrão: <b>789</b>(País) + <b>CNPJ</b> + <b>0000</b>(Sequência)<br>
-                        <i>Detectado automaticamente pela planilha ou memória.</i>
+                        Gerado via <b>Prefixo da Loja</b> + <b>Sequência</b>.<br>
+                        <i>Clique em Sincronizar para carregar o último ponto.</i>
                     </div>
                 </div>
                 
-                <button class="btn-magico" onclick="puxarMemoria()" data-tooltip="Puxa o último EAN da LOJA ATIVA lá de cima e soma +1 para você continuar a sequência em outra planilha.">🔗 Sincronizar Base</button>
+                <button class="btn-magico" onclick="puxarMemoria()" data-tooltip="Puxa a sequência salva desta loja e prepara o próximo EAN.">🔗 Sincronizar Seq.</button>
                 
                 <div class="grupo-input" style="flex: 0.4;">
                     <label>Total a Gerar:</label>
@@ -327,32 +328,28 @@
     </div>
 
     <script>
-        // =========================================================
         const URL_DO_PROXY = "https://proxyeanmaster.gsouzapatrick.workers.dev"; 
-        // =========================================================
 
         let API_TOKEN = ''; 
         let validacaoEmAndamento = false;
         let isPausadoManual = false; 
 
-        // Cofre de Lojas
+        // Gestão de Lojas e Sequência Atômica
         let bancoLojas = {
-            'default': { nome: 'Loja Principal', ultimoEan: null, base12: null }
+            'default': { nome: 'Loja Principal', prefixo: '789000000', ultimoSeq: 0, ultimoEan: null }
         };
         let lojaAtivaId = 'default';
+        let seqReservadaGlobal = 0n; // Impede repetição em lotes paralelos
 
         function uiAlert(title, message, isConfirm = false, confirmCallback = null) {
             document.getElementById('modalTitle').innerText = title;
             document.getElementById('modalMessage').innerHTML = message.replace(/\n/g, '<br>');
             document.getElementById('modalOverlay').style.display = 'flex';
-
             const btnCancel = document.getElementById('modalBtnCancel');
             const btnOk = document.getElementById('modalBtnOk');
-
             btnCancel.style.display = isConfirm ? 'inline-block' : 'none';
             btnCancel.innerText = 'Cancelar';
             btnOk.innerText = isConfirm ? 'Sim, Confirmar' : 'OK, Entendi';
-            
             btnCancel.onclick = () => fecharModal();
             btnOk.onclick = () => { fecharModal(); if(confirmCallback) confirmCallback(); };
         }
@@ -362,32 +359,16 @@
                 document.getElementById('modalTitle').innerText = title;
                 document.getElementById('modalMessage').innerHTML = message.replace(/\n/g, '<br>');
                 document.getElementById('modalOverlay').style.display = 'flex';
-
                 const btnCancel = document.getElementById('modalBtnCancel');
                 const btnOk = document.getElementById('modalBtnOk');
-
                 btnCancel.style.display = 'inline-block';
                 btnCancel.innerText = 'Parar Tudo';
                 btnOk.innerText = btnOkText;
-
                 btnCancel.onclick = () => { fecharModal(); resolve(false); };
                 btnOk.onclick = () => { fecharModal(); resolve(true); };
             });
         }
         function fecharModal() { document.getElementById('modalOverlay').style.display = 'none'; }
-
-        window.addEventListener('beforeunload', function (e) {
-            if (validacaoEmAndamento) {
-                e.preventDefault();
-                e.returnValue = 'A validação está em andamento. Se fechar a aba, você perderá o progresso.';
-                return e.returnValue;
-            }
-        });
-
-        function mostrarTela(idTela) {
-            document.querySelectorAll('.tela').forEach(t => t.classList.remove('ativa'));
-            document.getElementById(idTela).classList.add('ativa');
-        }
 
         function inicializarSistema() {
             const tokenSalvo = localStorage.getItem('ean_master_token');
@@ -420,61 +401,19 @@
             });
         }
 
-        let passoAtual = 0;
-        const passosTutorial = [
-            { el: 'hl-importar', titulo: '1. Importação & Raio-X', texto: 'Ao importar a planilha "Informação de Venda", o programa faz um raio-x revelando EANs ausentes ou duplicados.' },
-            { el: 'hl-acoes', titulo: '2. Inteligência de Correção', texto: 'Escolha se deseja preencher os vazios, corrigir as duplicidades ou substituir a loja inteira.' },
-            { el: 'hl-base', titulo: '3. Código Base Automático', texto: 'O programa tentará detectar sua sequência atual sozinho. Se for a primeira vez, digite o prefixo (Ex: 789 + Início CNPJ + 0000).' },
-            { el: 'hl-botoes', titulo: '4. Execução', texto: 'Gere a lista, valide e baixe a planilha. Envie o arquivo pronto na aba de Envio da Shopee!' }
-        ];
-
-        function iniciarTutorial(forcado = false) {
-            passoAtual = 0;
-            document.getElementById('tourOverlay').style.display = 'block';
-            document.getElementById('tourBox').style.display = 'block';
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            renderizarPasso();
-            if (!forcado) localStorage.setItem('tutorial_final_concluido', 'true');
+        function mostrarTela(idTela) {
+            document.querySelectorAll('.tela').forEach(t => t.classList.remove('ativa'));
+            document.getElementById(idTela).classList.add('ativa');
         }
 
-        function renderizarPasso() {
-            document.querySelectorAll('.tour-hl').forEach(el => el.classList.remove('tour-hl'));
-            if (passoAtual >= passosTutorial.length) {
-                document.getElementById('tourOverlay').style.display = 'none';
-                document.getElementById('tourBox').style.display = 'none';
-                return;
-            }
-            const passo = passosTutorial[passoAtual];
-            document.getElementById('tourTitle').innerText = passo.titulo;
-            document.getElementById('tourText').innerText = passo.texto;
-            document.querySelector('.tour-btn').innerText = passoAtual === passosTutorial.length - 1 ? "Entendi, vamos lá!" : "Próximo";
-            const elemento = document.getElementById(passo.el);
-            if (elemento) elemento.classList.add('tour-hl');
-        }
-        function proximoPassoTutorial() { passoAtual++; renderizarPasso(); }
-
-        let baseAutoDetectada = "";
-        let fonteBaseAtual = "manual"; 
-
+        // --- GESTÃO DE LOJAS ---
         function carregarCofreLojas() {
             const salvo = localStorage.getItem('ean_master_lojas');
-            if (salvo) {
-                bancoLojas = JSON.parse(salvo);
-            } else {
-                const memAntiga = JSON.parse(localStorage.getItem('ean_memoria_interna'));
-                if (memAntiga) {
-                    bancoLojas['default'].ultimoEan = memAntiga.ean;
-                    bancoLojas['default'].base12 = memAntiga.base12;
-                    localStorage.removeItem('ean_memoria_interna');
-                }
-                salvarCofreLojas();
-            }
-            
+            if (salvo) bancoLojas = JSON.parse(salvo);
             lojaAtivaId = localStorage.getItem('ean_master_loja_ativa') || 'default';
-            if (!bancoLojas[lojaAtivaId]) lojaAtivaId = 'default';
-
+            if (!bancoLojas[lojaAtivaId]) lojaAtivaId = Object.keys(bancoLojas)[0];
             atualizarSelectLojas();
-            atualizarUI_Memoria();
+            atualizarUI_Loja();
         }
 
         function salvarCofreLojas() {
@@ -497,127 +436,114 @@
         function trocarLoja() {
             lojaAtivaId = document.getElementById('selectLoja').value;
             salvarCofreLojas();
-            atualizarUI_Memoria();
-            document.getElementById('codigoBase').value = ""; 
-            fonteBaseAtual = "manual";
-            validarPrefixoGS1();
-            uiAlert("Loja Alterada", `Você agora está gerenciando: <b>${bancoLojas[lojaAtivaId].nome}</b>`);
+            resetarInterface();
+            atualizarUI_Loja();
+            uiAlert("Loja Alterada", `Você agora está em: <b>${bancoLojas[lojaAtivaId].nome}</b><br>Importe o arquivo desta loja para começar.`);
+        }
+
+        function resetarInterface() {
+            originalWorkbook = null;
+            originalWorksheet = null;
+            todosProdutos = [];
+            filaDeInjecao = [];
+            setEansExistentesGlobal = new Set();
+            document.getElementById('fileUpload').value = "";
+            document.getElementById('dashResumo').style.display = 'none';
+            document.getElementById('corpoTabela').innerHTML = "";
+            document.getElementById('qtdGerar').value = 0;
+            document.getElementById('codigoBase').value = "";
+            document.getElementById('statusContainer').style.display = 'none';
         }
 
         function criarNovaLoja() {
-            const nome = prompt("Digite um nome para a nova Loja ou Perfil:");
-            if (nome && nome.trim() !== "") {
-                const id = 'loja_' + Date.now();
-                bancoLojas[id] = { nome: nome.trim(), ultimoEan: null, base12: null };
-                lojaAtivaId = id;
+            const nome = prompt("Nome da Loja:");
+            if (!nome) return;
+            const prefixo = prompt("Digite o Prefixo de 9 dígitos (Ex: 789 + CNPJ):");
+            if (!prefixo || prefixo.length !== 9 || isNaN(prefixo)) return uiAlert("Erro", "O prefixo deve ter exatos 9 números.");
+
+            const id = 'loja_' + Date.now();
+            bancoLojas[id] = { nome: nome.trim(), prefixo: prefixo, ultimoSeq: 0, ultimoEan: null };
+            lojaAtivaId = id;
+            salvarCofreLojas();
+            atualizarSelectLojas();
+            trocarLoja();
+        }
+
+        function editarLojaAtiva() {
+            const loja = bancoLojas[lojaAtivaId];
+            const novoNome = prompt("Novo Nome da Loja:", loja.nome);
+            if (!novoNome) return;
+            const novoPrefixo = prompt("Novo Prefixo de 9 dígitos:", loja.prefixo);
+            if (!novoPrefixo || novoPrefixo.length !== 9) return uiAlert("Erro", "Prefixo inválido.");
+
+            loja.nome = novoNome;
+            loja.prefixo = novoPrefixo;
+            salvarCofreLojas();
+            atualizarSelectLojas();
+            atualizarUI_Loja();
+        }
+
+        function excluirLojaAtiva() {
+            if (Object.keys(bancoLojas).length <= 1) return uiAlert("Aviso", "Você precisa de ao menos uma loja cadastrada.");
+            uiAlert("Excluir Loja", `Tem certeza que deseja apagar a loja <b>${bancoLojas[lojaAtivaId].nome}</b>?`, true, () => {
+                delete bancoLojas[lojaAtivaId];
+                lojaAtivaId = Object.keys(bancoLojas)[0];
                 salvarCofreLojas();
                 atualizarSelectLojas();
-                atualizarUI_Memoria();
-            }
+                trocarLoja();
+            });
         }
 
-        function atualizarUI_Memoria() {
+        function atualizarUI_Loja() {
             const loja = bancoLojas[lojaAtivaId];
-            document.getElementById('txtUltimoEan').innerText = loja.ultimoEan ? loja.ultimoEan : "Nenhum registro";
+            document.getElementById('txtUltimoEan').innerText = loja.ultimoEan || "Nenhum registro";
+            validarPrefixoGS1_Visual(loja.prefixo);
         }
 
-        function puxarMemoria(silencioso = false) {
-            const loja = bancoLojas[lojaAtivaId];
-            if (loja && loja.base12) {
-                document.getElementById('codigoBase').value = (BigInt(loja.base12) + 1n).toString().padStart(12, '0');
-                fonteBaseAtual = "memoria";
-                validarPrefixoGS1();
-                if(!silencioso) uiAlert("Base Sincronizada", `A base da loja <b>${loja.nome}</b> foi sincronizada com sucesso!`);
-            } else if (!silencioso) {
-                uiAlert("Sem Histórico", `A loja <b>${loja.nome}</b> ainda não possui histórico salvo. Digite a base manualmente.`);
+        function validarPrefixoGS1_Visual(prefixo) {
+            const aviso = document.getElementById('avisoGS1');
+            aviso.style.display = "block";
+            if (!prefixo.startsWith('789') && !prefixo.startsWith('790')) {
+                aviso.innerHTML = "⚠️ Prefixo Global (Não-Brasil)";
+                aviso.style.color = "#d97706";
+            } else {
+                aviso.innerHTML = "✅ Prefixo Padrão Brasil (GS1)";
+                aviso.style.color = "#059669";
             }
         }
 
         function limparMemoriaInterna() {
-            uiAlert("Limpar Memória da Loja", `Tem certeza que deseja apagar o contador da loja <b>${bancoLojas[lojaAtivaId].nome}</b>?\nUse isso apenas se quiser recomeçar a sequência desta loja do zero.`, true, () => {
+            uiAlert("Zerar Sequência", `Deseja zerar o contador sequencial da loja <b>${bancoLojas[lojaAtivaId].nome}</b>?`, true, () => {
+                bancoLojas[lojaAtivaId].ultimoSeq = 0;
                 bancoLojas[lojaAtivaId].ultimoEan = null;
-                bancoLojas[lojaAtivaId].base12 = null;
                 salvarCofreLojas();
-                atualizarUI_Memoria();
+                atualizarUI_Loja();
                 document.getElementById('codigoBase').value = "";
-                fonteBaseAtual = "manual";
-                validarPrefixoGS1();
-                uiAlert("Pronto", "Memória da loja limpa com sucesso!");
             });
         }
 
-        function validarPrefixoGS1() {
-            const input = document.getElementById('codigoBase');
-            const aviso = document.getElementById('avisoGS1');
-            const val = input.value.replace(/\D/g, '');
-            
-            if (val.length >= 3) {
-                aviso.style.display = "block";
-                if (!val.startsWith('789') && !val.startsWith('790')) {
-                    aviso.innerHTML = "⚠️ Atenção: Padrão GS1 Brasil costuma iniciar com 789 ou 790.";
-                    aviso.style.color = "#d97706"; 
-                } else {
-                    aviso.innerHTML = "✅ Prefixo padrão Brasil detectado.";
-                    aviso.style.color = "#059669"; 
-                }
-            } else {
-                aviso.style.display = "none";
-            }
+        function puxarMemoria() {
+            const loja = bancoLojas[lojaAtivaId];
+            let proxSeq = loja.ultimoSeq + 1;
+            document.getElementById('codigoBase').value = loja.prefixo + proxSeq.toString().padStart(3, '0');
+            uiAlert("Seq. Sincronizada", `Pronto! A sequência começará em <b>${proxSeq}</b> para o prefixo <b>${loja.prefixo}</b>.`);
         }
 
-        function atualizarContador(isManual = false) {
-            let input = document.getElementById('codigoBase');
-            input.value = input.value.replace(/\D/g, ''); 
-            if(isManual) fonteBaseAtual = 'manual';
-            validarPrefixoGS1();
-        }
-
-        function mudouModoAcao() {
-            calcularFila();
-            const modo = document.querySelector('input[name="modo_acao"]:checked').value;
-            const inputBase = document.getElementById('codigoBase');
-
-            if (modo === 'todos') {
-                if (fonteBaseAtual === 'auto') {
-                    inputBase.value = "";
-                    fonteBaseAtual = "manual";
-                    validarPrefixoGS1();
-                    uiAlert("Mudança de Estratégia", "Como você escolheu 'Substituir Tudo', a base detectada da planilha foi limpa para evitar a geração de EANs repetidos.\n\nPor favor, digite uma nova base ou clique em 'Sincronizar Base'.");
-                }
-            } else {
-                if (inputBase.value === "" && baseAutoDetectada !== "") {
-                    inputBase.value = baseAutoDetectada;
-                    fonteBaseAtual = "auto";
-                    validarPrefixoGS1();
-                }
-            }
-        }
-
-        let originalWorkbook = null;
-        let originalWorksheet = null;
-        let originalFileName = "";
-        let shopeeGtinColNumber = -1; 
-        let shopeeProductIdCol = 1;
-        let shopeeVarIdCol = 3;
-        let todosProdutos = []; 
-        let filaDeInjecao = []; 
-        let setEansExistentesGlobal = new Set(); 
+        // --- LÓGICA DE PLANILHA ---
+        let originalWorkbook = null, originalWorksheet = null, originalFileName = "";
+        let shopeeGtinColNumber = -1, shopeeProductIdCol = 1, shopeeVarIdCol = 3;
+        let todosProdutos = [], filaDeInjecao = [], setEansExistentesGlobal = new Set();
 
         async function lerPlanilha(event) {
             const file = event.target.files[0];
             if(!file) return;
             originalFileName = file.name; 
-
             try {
                 const buffer = await file.arrayBuffer();
                 originalWorkbook = new ExcelJS.Workbook();
                 await originalWorkbook.xlsx.load(buffer);
                 originalWorksheet = originalWorkbook.worksheets[0]; 
-
                 shopeeGtinColNumber = -1;
-                shopeeProductIdCol = 1; 
-                shopeeVarIdCol = 3; 
-
                 for (let r = 1; r <= 3; r++) {
                     const row = originalWorksheet.getRow(r);
                     row.eachCell((cell, colNumber) => {
@@ -627,83 +553,176 @@
                         if (cellValue === 'variante identificador' || cellValue === 'et_title_variation_id') shopeeVarIdCol = colNumber;
                     });
                 }
-
-                if (shopeeGtinColNumber === -1) {
-                    return uiAlert("Atenção", "Coluna GTIN não encontrada.\nVerifique se é a planilha 'Informação de Venda'.");
-                }
+                if (shopeeGtinColNumber === -1) return uiAlert("Atenção", "Coluna GTIN não encontrada.");
 
                 todosProdutos = [];
                 setEansExistentesGlobal = new Set(); 
                 let stats = { total: 0, ok: 0, vazios: 0, duplicados: 0 };
-                let maxBaseDetectada = 0n;
-
                 originalWorksheet.eachRow((row, rowNumber) => {
                     if (rowNumber > 3) { 
                         const idProdRaw = String(row.getCell(shopeeProductIdCol).value || '').trim();
-                        if (idProdRaw && !isNaN(idProdRaw) && idProdRaw.length > 5) {
-                            
+                        if (idProdRaw && idProdRaw.length > 5) {
                             const eanAtual = String(row.getCell(shopeeGtinColNumber).value || '').trim();
-                            const idVarRaw = String(row.getCell(shopeeVarIdCol).value || '0').trim();
-                            
                             stats.total++;
                             let isVazio = (!eanAtual || eanAtual.length < 8 || eanAtual.includes('Obrigat'));
                             let isDuplicado = false;
-
-                            if (isVazio) {
-                                stats.vazios++;
-                            } else {
-                                if (setEansExistentesGlobal.has(eanAtual)) {
-                                    stats.duplicados++;
-                                    isDuplicado = true;
-                                } else {
-                                    setEansExistentesGlobal.add(eanAtual);
-                                    stats.ok++;
-                                }
-                                
-                                if (eanAtual.length === 13 && !isNaN(eanAtual)) {
-                                    let base12 = BigInt(eanAtual.substring(0, 12));
-                                    if (base12 > maxBaseDetectada) maxBaseDetectada = base12;
-                                }
+                            if (isVazio) stats.vazios++;
+                            else {
+                                if (setEansExistentesGlobal.has(eanAtual)) { stats.duplicados++; isDuplicado = true; }
+                                else { setEansExistentesGlobal.add(eanAtual); stats.ok++; }
                             }
-
-                            todosProdutos.push({ rowNum: rowNumber, idProd: idProdRaw, idVar: idVarRaw, isVazio: isVazio, isDuplicado: isDuplicado });
+                            todosProdutos.push({ rowNum: rowNumber, idProd: idProdRaw, idVar: String(row.getCell(shopeeVarIdCol).value || '0').trim(), isVazio, isDuplicado });
                         }
                     }
                 });
-
                 document.getElementById('rxTotal').innerText = stats.total;
                 document.getElementById('rxOk').innerText = stats.ok;
                 document.getElementById('rxVazios').innerText = stats.vazios;
                 document.getElementById('rxDuplicados').innerText = stats.duplicados;
                 document.getElementById('dashResumo').style.display = 'grid';
-
-                if (maxBaseDetectada > 0n) {
-                    baseAutoDetectada = (maxBaseDetectada + 1n).toString().padStart(12, '0');
-                    document.getElementById('codigoBase').value = baseAutoDetectada;
-                    fonteBaseAtual = "auto";
-                } else {
-                    baseAutoDetectada = "";
-                    puxarMemoria(true);
-                }
-                validarPrefixoGS1();
-
                 calcularFila(); 
-
-            } catch (error) { uiAlert("Erro", "Falha ao ler o arquivo Excel."); }
+            } catch (error) { uiAlert("Erro", "Falha ao ler o arquivo."); }
         }
 
         function calcularFila() {
             if (todosProdutos.length === 0) return;
-            const modoSelecionado = document.querySelector('input[name="modo_acao"]:checked').value;
+            const modo = document.querySelector('input[name="modo_acao"]:checked').value;
             filaDeInjecao = [];
-
             todosProdutos.forEach(prod => {
-                if (modoSelecionado === 'todos') { filaDeInjecao.push(prod); } 
-                else if (modoSelecionado === 'erros') { if (prod.isVazio || prod.isDuplicado) filaDeInjecao.push(prod); } 
+                if (modo === 'todos') filaDeInjecao.push(prod);
+                else if (modo === 'erros') { if (prod.isVazio || prod.isDuplicado) filaDeInjecao.push(prod); }
                 else { if (prod.isVazio) filaDeInjecao.push(prod); }
             });
-
             document.getElementById('qtdGerar').value = filaDeInjecao.length;
+        }
+
+        function mudouModoAcao() { calcularFila(); }
+
+        function gerarTabela() {
+            if (validacaoEmAndamento) return;
+            const tbody = document.getElementById('corpoTabela');
+            if (filaDeInjecao.length === 0) return uiAlert("Atenção", "Fila vazia.");
+            
+            const base = document.getElementById('codigoBase').value.replace(/\D/g, '');
+            if (base.length !== 12) return uiAlert("Erro", "Sincronize a Sequência ou edite o prefixo da loja.");
+
+            tbody.innerHTML = ""; 
+            let seqLocal = BigInt(base);
+            let fragment = document.createDocumentFragment();
+
+            filaDeInjecao.forEach((item, i) => {
+                let eanValido = false, ean;
+                while (!eanValido) {
+                    let b12 = seqLocal.toString().padStart(12, '0');
+                    ean = b12 + calcularDigitoVerificador(b12);
+                    if (setEansExistentesGlobal.has(ean)) seqLocal++;
+                    else eanValido = true;
+                }
+                item.eanGerado = ean;
+                item.statusValidacao = 'pendente';
+                let tr = document.createElement('tr');
+                tr.innerHTML = `<td>${i+1}</td><td class="codigo-ean" id="ean-visual-${i}">${ean}</td>
+                                <td><span class="badge badge-pendente" id="status-badge-${i}">⏳ Aguardando</span></td>
+                                <td class="produto-nome">Prod: ${item.idProd}<br>Var: ${item.idVar}</td>`;
+                fragment.appendChild(tr);
+                seqLocal++;
+            });
+            tbody.appendChild(fragment);
+        }
+
+        // --- MOTOR DE VALIDAÇÃO (ANTI-REPETIÇÃO) ---
+        async function verificarNoBanco() {
+            const linhas = document.querySelectorAll('#corpoTabela tr');
+            if (linhas.length === 0) return uiAlert("Erro", "Gere a lista primeiro.");
+            
+            validacaoEmAndamento = true;
+            isPausadoManual = false;
+            let validacaoCancelada = false, limiteAtingido = false;
+            let validadosConcluidos = 0;
+            const TAMANHO_LOTE = 3;
+
+            // Pega a base inicial da tabela para recalcular sem atropelar
+            seqReservadaGlobal = BigInt(filaDeInjecao[filaDeInjecao.length - 1].eanGerado.substring(0,12)) + 1n;
+
+            travarInterface(true);
+            document.getElementById('statusContainer').style.display = 'block';
+            const progresso = document.getElementById('progresso');
+
+            async function processarItem(i) {
+                if (limiteAtingido || validacaoCancelada) return;
+                let linha = linhas[i], item = filaDeInjecao[i], celulaStatus = linha.querySelector('td:nth-child(3)');
+
+                if (i % TAMANHO_LOTE === 0) linha.scrollIntoView({ behavior: "smooth", block: "center" });
+                celulaStatus.innerHTML = `<span class="badge" style="background:#e0f2fe; color:#0284c7;">Buscando...</span>`;
+
+                let processado = false;
+                while (!processado && !validacaoCancelada && !limiteAtingido) {
+                    if (isPausadoManual) { await new Promise(r => setTimeout(r, 500)); continue; }
+
+                    try {
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 8000);
+                        let res = await fetch(`${URL_DO_PROXY}/${item.eanGerado}`, { headers: { 'X-Cosmos-Token': API_TOKEN }, signal: controller.signal });
+                        clearTimeout(timeoutId);
+
+                        if (res.status === 200) { 
+                            // EM USO: Pega o próximo da reserva global para garantir zero repetição
+                            let novaBase = seqReservadaGlobal.toString().padStart(12, '0');
+                            item.eanGerado = novaBase + calcularDigitoVerificador(novaBase);
+                            seqReservadaGlobal++; 
+                            
+                            linha.querySelector('.codigo-ean').innerText = item.eanGerado;
+                            celulaStatus.innerHTML = `<span class="badge badge-buscando">🔄 Recalculando...</span>`;
+                            await new Promise(r => setTimeout(r, 500));
+                        } 
+                        else if (res.status === 404) { item.statusValidacao = 'aprovado'; celulaStatus.innerHTML = `<span class="badge badge-livre">Livre</span>`; processado = true; }
+                        else if (res.status === 429) { limiteAtingido = true; processado = true; }
+                        else { item.statusValidacao = 'aprovado'; celulaStatus.innerHTML = `<span class="badge badge-offline">✅ OK</span>`; processado = true; }
+                    } catch (e) { item.statusValidacao = 'offline'; celulaStatus.innerHTML = `<span class="badge badge-offline">✅ Timeout</span>`; processado = true; }
+                }
+                validadosConcluidos++;
+            }
+
+            for (let i = 0; i < linhas.length; i += TAMANHO_LOTE) {
+                if (validacaoCancelada || limiteAtingido) break;
+                progresso.innerText = `Validando: ${Math.min(i + TAMANHO_LOTE, linhas.length)} de ${linhas.length}`;
+                let lote = [];
+                for (let j = i; j < i + TAMANHO_LOTE && j < linhas.length; j++) lote.push(processarItem(j));
+                await Promise.all(lote);
+                await new Promise(r => setTimeout(r, 600));
+            }
+
+            progresso.innerText = limiteAtingido ? "Cota da API Atingida. Use o que foi validado." : "Validação Concluída!";
+            validacaoEmAndamento = false;
+            travarInterface(false);
+        }
+
+        async function exportarPlanilha() {
+            if(!originalWorkbook) return;
+            let eansValidados = [], log = "ID_Produto\tID_Variante\tEAN\n", possuiErro = false;
+
+            filaDeInjecao.forEach(item => {
+                if (item.statusValidacao === 'aprovado' || item.statusValidacao === 'offline') {
+                    eansValidados.push(item.eanGerado);
+                    originalWorksheet.getCell(item.rowNum, shopeeGtinColNumber).value = String(item.eanGerado);
+                    log += `${item.idProd}\t${item.idVar}\t${item.eanGerado}\n`;
+                } else possuiErro = true;
+            });
+
+            if (possuiErro) return uiAlert("Atenção", "Existem códigos pendentes ou em uso.");
+
+            const ultimo = eansValidados[eansValidados.length - 1];
+            bancoLojas[lojaAtivaId].ultimoEan = ultimo;
+            bancoLojas[lojaAtivaId].ultimoSeq = parseInt(ultimo.substring(9,12));
+            salvarCofreLojas();
+            atualizarUI_Loja();
+
+            const buffer = await originalWorkbook.xlsx.writeBuffer();
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+            link.download = "EAN_MASTER_" + originalFileName;
+            link.click();
+            uiAlert("Sucesso", "Planilha exportada com sucesso!");
         }
 
         function calcularDigitoVerificador(base12) {
@@ -712,311 +731,8 @@
             return (Math.ceil(soma / 10) * 10) - soma;
         }
 
-        function formatarTempo(segs) { return segs <= 0 ? "Finalizando..." : `${Math.floor(segs/60)}m ${Math.floor(segs%60)}s`; }
-        function formatarHoraConclusao(segs) {
-            if (segs <= 0) return "Concluído!";
-            let d = new Date(Date.now() + (segs * 1000));
-            return `Término previsto: ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
-        }
-
-        function gerarTabela() {
-            if (validacaoEmAndamento) return;
-            const tbody = document.getElementById('corpoTabela');
-            if (filaDeInjecao.length === 0) return uiAlert("Atenção", "Não há produtos na fila para a regra selecionada.\nVerifique a planilha ou altere o Modo de Correção.");
-            
-            let base = document.getElementById('codigoBase').value.replace(/\D/g, '');
-            if (base.length !== 12) return uiAlert("Formato Incorreto", "O Código Base precisa ter exatamente 12 números (Prefixo).");
-
-            document.getElementById('statusContainer').style.display = 'none';
-            tbody.innerHTML = ""; 
-            
-            let seq = BigInt(base);
-            let fragment = document.createDocumentFragment();
-
-            filaDeInjecao.forEach((item, i) => {
-                let eanValido = false;
-                let b12, ean;
-                
-                while (!eanValido) {
-                    b12 = seq.toString().padStart(12, '0');
-                    ean = b12 + calcularDigitoVerificador(b12);
-                    
-                    if (setEansExistentesGlobal.has(ean)) {
-                        seq++; 
-                    } else {
-                        eanValido = true;
-                    }
-                }
-                
-                item.eanGerado = ean;
-                item.statusValidacao = 'pendente';
-
-                let tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td>${i+1}</td>
-                    <td class="codigo-ean" id="ean-visual-${i}">${ean}</td>
-                    <td><span class="badge badge-pendente" id="status-badge-${i}">⏳ Aguardando</span></td>
-                    <td class="produto-nome">
-                        <span class="id-label">Prod:</span> ${item.idProd}<br>
-                        <span class="id-label">Var:</span> ${item.idVar}
-                    </td>
-                `;
-                fragment.appendChild(tr);
-                seq++; 
-            });
-            tbody.appendChild(fragment);
-        }
-
-        function travarInterface(travado) {
-            document.querySelectorAll('.painel-controles input, .painel-controles button').forEach(el => el.disabled = travado);
-            document.getElementById('selectLoja').disabled = travado;
-        }
-
-        function alternarPausa() {
-            isPausadoManual = !isPausadoManual;
-            const btn = document.getElementById('btnPausar');
-            const timer = document.getElementById('timer');
-            const progresso = document.getElementById('progresso');
-
-            if (isPausadoManual) {
-                btn.innerHTML = "▶️ Retomar Validação";
-                btn.classList.add('modo-retomar');
-                timer.innerText = "⏸️ PAUSADO PELO USUÁRIO";
-                progresso.innerText = "Aguardando retomada...";
-            } else {
-                btn.innerHTML = "⏸️ Pausar Validação";
-                btn.classList.remove('modo-retomar');
-            }
-        }
-
-        async function verificarNoBanco() {
-            const linhas = document.querySelectorAll('#corpoTabela tr');
-            if (linhas.length === 0) return uiAlert("Passo Ausente", "Gere a lista primeiro clicando no botão 'Gerar Lista'.");
-            
-            validacaoEmAndamento = true;
-            isPausadoManual = false;
-            let validacaoCancelada = false;
-            travarInterface(true);
-
-            document.getElementById('statusContainer').style.display = 'block';
-            document.getElementById('btnPausar').style.display = 'inline-flex';
-            document.getElementById('btnPausar').innerHTML = "⏸️ Pausar Validação";
-            document.getElementById('btnPausar').classList.remove('modo-retomar');
-
-            const progresso = document.getElementById('progresso');
-            const timer = document.getElementById('timer');
-            const conclusao = document.getElementById('horaConclusao');
-
-            const isModoOfflineRisk = document.getElementById('checkOffline').checked;
-            const total = linhas.length;
-            let tempoInicio = Date.now();
-            let limiteAtingido = false;
-            let validadosConcluidos = 0;
-
-            const TAMANHO_LOTE = 3;
-
-            async function processarItem(i) {
-                if (limiteAtingido || validacaoCancelada) return;
-
-                let linha = linhas[i];
-                let ean = filaDeInjecao[i].eanGerado; 
-                let celulaStatus = linha.querySelector('td:nth-child(3)');
-
-                if (isModoOfflineRisk) {
-                    filaDeInjecao[i].statusValidacao = 'offline';
-                    celulaStatus.innerHTML = `<span class="badge badge-offline">✅ Aprovado</span>`;
-                    validadosConcluidos++;
-                    return;
-                }
-
-                if (i % TAMANHO_LOTE === 0) linha.scrollIntoView({ behavior: "smooth", block: "center" });
-                celulaStatus.innerHTML = `<span class="badge" style="background:#e0f2fe; color:#0284c7;">Buscando...</span>`;
-
-                let processado = false;
-                while (!processado && !validacaoCancelada && !limiteAtingido) {
-                    while (isPausadoManual) {
-                        await new Promise(r => setTimeout(r, 500));
-                    }
-                    if (validacaoCancelada || limiteAtingido) break;
-
-                    try {
-                        const controller = new AbortController();
-                        const timeoutId = setTimeout(() => controller.abort(), 10000); 
-
-                        // NOVO: Chama a URL do Proxy Cloudflare
-                        let res = await fetch(`${URL_DO_PROXY}/${ean}`, { 
-                            headers: { 'X-Cosmos-Token': API_TOKEN },
-                            signal: controller.signal
-                        });
-                        
-                        clearTimeout(timeoutId);
-
-                        if (res.status === 200) { 
-                            let base12Ativa = BigInt(ean.substring(0, 12));
-                            base12Ativa++; 
-                            
-                            let novoB12 = base12Ativa.toString().padStart(12, '0');
-                            ean = novoB12 + calcularDigitoVerificador(novoB12); 
-                            
-                            filaDeInjecao[i].eanGerado = ean; 
-                            linha.querySelector('.codigo-ean').innerText = ean; 
-                            celulaStatus.innerHTML = `<span class="badge badge-buscando">🔄 Recalculando...</span>`;
-                            
-                            await new Promise(r => setTimeout(r, 600)); 
-                        } 
-                        else if (res.status === 404) { 
-                            filaDeInjecao[i].statusValidacao = 'aprovado';
-                            celulaStatus.innerHTML = `<span class="badge badge-livre">Livre</span>`; 
-                            processado = true; 
-                        } 
-                        else if (res.status === 429) {
-                            for(let j = validadosConcluidos; j < total; j++) {
-                                if(filaDeInjecao[j].statusValidacao !== 'aprovado' && filaDeInjecao[j].statusValidacao !== 'em_uso') {
-                                    filaDeInjecao[j].statusValidacao = 'offline';
-                                    linhas[j].querySelector('td:nth-child(3)').innerHTML = `<span class="badge badge-offline">✅ Aprovado (Limite API)</span>`;
-                                }
-                            }
-                            processado = true;
-                            limiteAtingido = true;
-                            break; 
-                        } else { 
-                            filaDeInjecao[i].statusValidacao = 'aprovado';
-                            celulaStatus.innerHTML = `<span class="badge badge-offline">✅ Aprovado</span>`; 
-                            processado = true; 
-                        }
-                    } catch (e) { 
-                        if (e.name === 'AbortError') {
-                            filaDeInjecao[i].statusValidacao = 'offline';
-                            celulaStatus.innerHTML = `<span class="badge badge-offline">✅ Aprovado (Timeout)</span>`;
-                            processado = true;
-                        } else {
-                            celulaStatus.innerHTML = `<span class="badge badge-erro">🛑 Pausado</span>`;
-                            
-                            if (!isPausadoManual && !validacaoCancelada) {
-                                alternarPausa(); 
-                                // NOVA MENSAGEM: Sem mencionar extensões
-                                let mensagemQueda = "Sua conexão com a internet caiu ou houve uma falha de rede.\n\n1. Verifique sua conexão.\n2. Clique no botão abaixo para retomar de onde parou.";
-                                
-                                let retomar = await uiConfirmAsync("Conexão Interrompida ⚠️", mensagemQueda, "✅ Conexão ok, retomar!");
-                                
-                                if (retomar) {
-                                    alternarPausa(); 
-                                } else {
-                                    validacaoCancelada = true;
-                                }
-                            } else {
-                                while (isPausadoManual && !validacaoCancelada) {
-                                    await new Promise(r => setTimeout(r, 500));
-                                }
-                            }
-                            
-                            if(!validacaoCancelada) celulaStatus.innerHTML = `<span class="badge badge-buscando">🔄 Retomando...</span>`;
-                        }
-                    }
-                } 
-                validadosConcluidos++;
-            }
-
-            for (let i = 0; i < total; i += TAMANHO_LOTE) {
-                if (validacaoCancelada || limiteAtingido) break;
-
-                while (isPausadoManual) {
-                    await new Promise(r => setTimeout(r, 500));
-                    tempoInicio += 500; 
-                }
-
-                let tempoPassado = (Date.now() - tempoInicio) / 1000;
-                let media = validadosConcluidos > 0 ? tempoPassado / validadosConcluidos : 1.5; 
-                let segsRestantes = (total - validadosConcluidos) * media;
-
-                timer.innerText = `⏱️ Restante: ${formatarTempo(segsRestantes)}`;
-                conclusao.innerText = formatarHoraConclusao(segsRestantes);
-                progresso.innerText = `Validando no Banco: ${Math.min(i + TAMANHO_LOTE, total)} de ${total}`;
-
-                let lote = [];
-                for (let j = i; j < i + TAMANHO_LOTE && j < total; j++) {
-                    lote.push(processarItem(j));
-                }
-
-                await Promise.all(lote); 
-
-                if (isModoOfflineRisk && validadosConcluidos >= total) break;
-
-                await new Promise(r => setTimeout(r, 800)); 
-            }
-            
-            if (validacaoCancelada) {
-                progresso.innerText = "Processo Cancelado pelo Usuário.";
-                timer.innerText = "-";
-                conclusao.innerText = "-";
-            } else if (limiteAtingido) {
-                progresso.innerText = "Validação Concluída! (Cota da API Atingida)";
-                timer.innerText = "✅ Finalizado!";
-                conclusao.innerText = "-";
-            } else {
-                progresso.innerText = "Validação Concluída! Pode baixar a planilha.";
-                timer.innerText = "✅ Finalizado!";
-                conclusao.innerText = "-";
-            }
-
-            validacaoEmAndamento = false;
-            travarInterface(false);
-            document.getElementById('btnPausar').style.display = 'none';
-        }
-
-        async function exportarPlanilha() {
-            if(!originalWorkbook || filaDeInjecao.length === 0) return;
-
-            let eansValidados = [];
-            let logConteudo = "ID_Produto\tID_Variante\tEAN_Atribuido\n"; 
-            let possuiErro = false;
-
-            filaDeInjecao.forEach(item => {
-                if (item.statusValidacao === 'em_uso' || item.statusValidacao === 'erro') {
-                    possuiErro = true;
-                }
-                if (item.statusValidacao === 'aprovado' || item.statusValidacao === 'offline') {
-                    eansValidados.push(item.eanGerado);
-                    originalWorksheet.getCell(item.rowNum, shopeeGtinColNumber).value = String(item.eanGerado);
-                    logConteudo += `${item.idProd}\t${item.idVar}\t${item.eanGerado}\n`;
-                }
-            });
-
-            if (possuiErro) return uiAlert("Atenção", "Códigos 'Em Uso' foram encontrados.\nPor favor, altere o Código Base e gere novamente.");
-            if (eansValidados.length < filaDeInjecao.length) return uiAlert("Atenção", "Você precisa validar a lista completa antes de baixar o arquivo.");
-
-            const ultimoEan = eansValidados[eansValidados.length - 1];
-            bancoLojas[lojaAtivaId].ultimoEan = ultimoEan;
-            bancoLojas[lojaAtivaId].base12 = ultimoEan.substring(0, 12);
-            salvarCofreLojas();
-            atualizarUI_Memoria(); 
-
-            let prefixo = "";
-            let modo = document.querySelector('input[name="modo_acao"]:checked').value;
-            if (modo === 'todos') prefixo = "COMPLETA_";
-            if (modo === 'erros') prefixo = "CORRIGIDA_";
-            if (modo === 'vazios') prefixo = "VAZIOS_";
-
-            let nomeFinal = prefixo + originalFileName;
-
-            const blobLog = new Blob([logConteudo], { type: 'text/plain' });
-            const linkLog = document.createElement("a");
-            linkLog.href = URL.createObjectURL(blobLog);
-            linkLog.download = `LOG_${nomeFinal.replace('.xlsx', '.txt')}`;
-            document.body.appendChild(linkLog);
-            linkLog.click();
-            document.body.removeChild(linkLog);
-
-            const buffer = await originalWorkbook.xlsx.writeBuffer();
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-            link.download = nomeFinal;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-
-            uiAlert("🎉 ARQUIVOS SALVOS!", `A planilha e o Log de Auditoria foram baixados!\n\nCOMO ENVIAR PARA A SHOPEE:\n1. Acesse <b>Ações em Massa > Editar em Massa</b>.\n2. Clique na aba <b>'Envio'</b>.\n3. Envie a planilha gerada e aguarde a conclusão!`);
-        }
+        function travarInterface(t) { document.querySelectorAll('button, select, input').forEach(el => el.disabled = t); }
+        function alternarPausa() { isPausadoManual = !isPausadoManual; }
     </script>
 </body>
 </html>

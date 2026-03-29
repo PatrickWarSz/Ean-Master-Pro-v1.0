@@ -69,8 +69,8 @@
         .input-token:focus { border-color: var(--shopee-laranja); box-shadow: 0 0 0 3px rgba(238, 77, 45, 0.1); }
 
         .painel-memoria { background: #eef2ff; border-left: 5px solid #6366f1; padding: 15px 20px; border-radius: 8px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;}
-        .seletor-loja { flex: 1; min-width: 250px; display: flex; align-items: center; gap: 10px; }
-        .seletor-loja select { flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid #c7d2fe; outline: none; font-size: 14px; background: white; color: #312e81; font-weight: bold; cursor: pointer;}
+        .seletor-loja { flex: 1; min-width: 250px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;}
+        .seletor-loja select { flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid #c7d2fe; outline: none; font-size: 14px; background: white; color: #312e81; font-weight: bold; cursor: pointer; min-width: 150px;}
         .memoria-detalhes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;}
         .memoria-texto { font-size: 13px; color: #312e81; white-space: nowrap;}
         .memoria-destaque { font-family: monospace; font-size: 16px; font-weight: bold; background: white; padding: 4px 10px; border-radius: 6px; border: 1px solid #c7d2fe; white-space: nowrap;}
@@ -219,15 +219,15 @@
         <div class="painel-memoria">
             <div class="seletor-loja">
                 <div class="memoria-texto">🏢 <b>Loja Ativa:</b></div>
-                <select id="selectLoja" onchange="trocarLoja()">
-                    <option value="default">Loja Principal</option>
-                </select>
-                <button class="btn-top" onclick="criarNovaLoja()" style="padding: 6px 10px;" data-tooltip="Criar um novo perfil de loja com contador independente.">➕ Nova</button>
+                <select id="selectLoja" onchange="trocarLoja(false)"></select>
+                <button class="btn-top" onclick="editarLoja()" data-tooltip="Renomear a loja atual">✏️</button>
+                <button class="btn-top" onclick="excluirLoja()" data-tooltip="Excluir este perfil">🗑️</button>
+                <button class="btn-top" onclick="criarNovaLoja()" style="padding: 6px 10px;" data-tooltip="Criar um novo perfil isolado com CNPJ próprio.">➕ Nova</button>
             </div>
             <div class="memoria-detalhes">
                 <div class="memoria-texto">Último EAN da Loja:</div>
                 <div class="memoria-destaque" id="txtUltimoEan">Nenhum registro</div>
-                <button class="btn-top btn-perigo" onclick="limparMemoriaInterna()" data-tooltip="Apaga o último EAN salvo para você começar uma nova sequência do zero, sem conflitos.">🗑️ Limpar</button>
+                <button class="btn-top btn-perigo" onclick="limparMemoriaInterna()" data-tooltip="Apaga o último EAN salvo para você começar uma nova sequência do zero.">🗑️ Limpar</button>
             </div>
         </div>
 
@@ -271,22 +271,22 @@
                 </div>
                 <div class="opcao-modo">
                     <input type="radio" name="modo_acao" value="todos" id="modoTodos" onchange="mudouModoAcao()">
-                    <label for="modoTodos" data-tooltip="Gera uma sequência limpa e nova para a loja toda. Esmaga EANs antigos.">🚜 Substituir Tudo</label>
+                    <label for="modoTodos" data-tooltip="Limpa os EANs antigos e gera uma nova sequência a partir da base configurada para esta loja.">🚜 Substituir Tudo</label>
                 </div>
             </div>
 
             <div class="linha-inputs" id="hl-base">
                 <div class="grupo-input">
-                    <label>Passo 2: Código Base (Prefixo):</label>
-                    <input type="text" id="codigoBase" placeholder="Ex: 789000000000" maxlength="12" oninput="atualizarContador(true)" data-tooltip="Siga o padrão GS1 global.">
+                    <label>Passo 2: Código Base (12 Dígitos):</label>
+                    <input type="text" id="codigoBase" placeholder="Ex: 789000000000" maxlength="12" oninput="atualizarContador(true)" data-tooltip="Siga o padrão GS1 global (Prefixo da Loja + Sequência).">
                     <div class="aviso-gs1" id="avisoGS1"></div>
                     <div class="dica-input">
                         Padrão: <b>789</b>(País) + <b>CNPJ</b> + <b>0000</b>(Sequência)<br>
-                        <i>Detectado automaticamente pela planilha ou memória.</i>
+                        <i>Detectado automaticamente pela planilha ou perfil.</i>
                     </div>
                 </div>
                 
-                <button class="btn-magico" onclick="puxarMemoria()" data-tooltip="Puxa o último EAN da LOJA ATIVA lá de cima e soma +1 para você continuar a sequência em outra planilha.">🔗 Sincronizar Base</button>
+                <button class="btn-magico" onclick="puxarMemoria()" data-tooltip="Puxa o último EAN da LOJA ATIVA lá de cima e soma +1 para você continuar a sequência de onde parou.">🔗 Sincronizar Base</button>
                 
                 <div class="grupo-input" style="flex: 0.4;">
                     <label>Total a Gerar:</label>
@@ -340,6 +340,9 @@
             'default': { nome: 'Loja Principal', ultimoEan: null, base12: null }
         };
         let lojaAtivaId = 'default';
+
+        // Variável global para controlar a Fila de EANs com Trava de Repetição
+        let sequenciaGlobalAtual = 0n;
 
         function uiAlert(title, message, isConfirm = false, confirmCallback = null) {
             document.getElementById('modalTitle').innerText = title;
@@ -422,9 +425,9 @@
 
         let passoAtual = 0;
         const passosTutorial = [
-            { el: 'hl-importar', titulo: '1. Importação & Raio-X', texto: 'Ao importar a planilha "Informação de Venda", o programa faz um raio-x revelando EANs ausentes ou duplicados.' },
+            { el: 'hl-importar', titulo: '1. Importação & Raio-X', texto: 'Ao importar a planilha "Informação de Venda", o programa faz um raio-x revelando EANs ausentes ou duplicados. Trocar de loja limpa o painel para não misturar dados!' },
             { el: 'hl-acoes', titulo: '2. Inteligência de Correção', texto: 'Escolha se deseja preencher os vazios, corrigir as duplicidades ou substituir a loja inteira.' },
-            { el: 'hl-base', titulo: '3. Código Base Automático', texto: 'O programa tentará detectar sua sequência atual sozinho. Se for a primeira vez, digite o prefixo (Ex: 789 + Início CNPJ + 0000).' },
+            { el: 'hl-base', titulo: '3. Código Base & CNPJ', texto: 'O programa gerencia a sequência baseada no prefixo de cada Loja (Ex: 789 + Início CNPJ). Sem conflitos e sem misturar dados!' },
             { el: 'hl-botoes', titulo: '4. Execução', texto: 'Gere a lista, valide e baixe a planilha. Envie o arquivo pronto na aba de Envio da Shopee!' }
         ];
 
@@ -475,6 +478,15 @@
 
             atualizarSelectLojas();
             atualizarUI_Memoria();
+            
+            // Força configuração inicial da base do input
+            const loja = bancoLojas[lojaAtivaId];
+            if (loja.base12) {
+                document.getElementById('codigoBase').value = (BigInt(loja.base12) + 1n).toString().padStart(12, '0');
+            } else if (loja.prefixoLoja) {
+                document.getElementById('codigoBase').value = loja.prefixoLoja.padEnd(12, '0');
+            }
+            validarPrefixoGS1();
         }
 
         function salvarCofreLojas() {
@@ -494,26 +506,97 @@
             }
         }
 
-        function trocarLoja() {
+        function limparWorkspace() {
+            // 1. Limpa o ficheiro importado
+            document.getElementById('fileUpload').value = "";
+            originalWorkbook = null;
+            originalWorksheet = null;
+            
+            // 2. Esconde e zera o Dashboard
+            document.getElementById('dashResumo').style.display = 'none';
+            document.getElementById('rxTotal').innerText = "0";
+            document.getElementById('rxOk').innerText = "0";
+            document.getElementById('rxVazios').innerText = "0";
+            document.getElementById('rxDuplicados').innerText = "0";
+            
+            // 3. Limpa as arrays e a tabela visual
+            todosProdutos = [];
+            filaDeInjecao = [];
+            setEansExistentesGlobal.clear();
+            document.getElementById('corpoTabela').innerHTML = "";
+            document.getElementById('qtdGerar').value = "0";
+            
+            // 4. Reset do status
+            document.getElementById('statusContainer').style.display = 'none';
+            baseAutoDetectada = "";
+        }
+
+        function trocarLoja(silencioso = false) {
             lojaAtivaId = document.getElementById('selectLoja').value;
             salvarCofreLojas();
+            limparWorkspace(); // CLEAN STATE
             atualizarUI_Memoria();
-            document.getElementById('codigoBase').value = ""; 
+            
+            const loja = bancoLojas[lojaAtivaId];
+            if (loja.base12) {
+                document.getElementById('codigoBase').value = (BigInt(loja.base12) + 1n).toString().padStart(12, '0');
+            } else if (loja.prefixoLoja) {
+                document.getElementById('codigoBase').value = loja.prefixoLoja.padEnd(12, '0');
+            } else {
+                document.getElementById('codigoBase').value = "";
+            }
+            
             fonteBaseAtual = "manual";
             validarPrefixoGS1();
-            uiAlert("Loja Alterada", `Você agora está gerenciando: <b>${bancoLojas[lojaAtivaId].nome}</b>`);
+            
+            if(!silencioso) uiAlert("Loja Alterada", `Você agora está gerenciando o perfil: <b>${loja.nome}</b>\nO painel foi limpo para uma nova importação.`);
         }
 
         function criarNovaLoja() {
             const nome = prompt("Digite um nome para a nova Loja ou Perfil:");
-            if (nome && nome.trim() !== "") {
+            if (!nome || nome.trim() === "") return;
+            
+            const baseCnpj = prompt("Configuração Inicial:\nDigite o prefixo base da loja (Padrão: 789 + 5 primeiros dígitos do CNPJ).\nEx: 78912345");
+            
+            if (baseCnpj && baseCnpj.length >= 8 && !isNaN(baseCnpj)) {
                 const id = 'loja_' + Date.now();
-                bancoLojas[id] = { nome: nome.trim(), ultimoEan: null, base12: null };
+                bancoLojas[id] = { 
+                    nome: nome.trim(), 
+                    prefixoLoja: baseCnpj, 
+                    ultimoEan: null, 
+                    base12: baseCnpj.padEnd(12, '0') 
+                };
                 lojaAtivaId = id;
                 salvarCofreLojas();
                 atualizarSelectLojas();
-                atualizarUI_Memoria();
+                trocarLoja(true);
+            } else {
+                uiAlert("Erro", "A base precisa ser numérica e ter pelo menos 8 dígitos.");
             }
+        }
+
+        function editarLoja() {
+            if (lojaAtivaId === 'default') return uiAlert("Ação Bloqueada", "A Loja Principal padrão não pode ser renomeada.");
+            const lojaAtual = bancoLojas[lojaAtivaId];
+            const novoNome = prompt("Digite o novo nome para a loja:", lojaAtual.nome);
+            if (novoNome && novoNome.trim() !== "") {
+                bancoLojas[lojaAtivaId].nome = novoNome.trim();
+                salvarCofreLojas();
+                atualizarSelectLojas();
+            }
+        }
+
+        function excluirLoja() {
+            if (lojaAtivaId === 'default') {
+                return uiAlert("Ação Bloqueada", "A Loja Principal não pode ser excluída, pois é o perfil padrão do sistema.");
+            }
+            uiAlert("Excluir Loja", `Tem certeza que deseja excluir o perfil <b>${bancoLojas[lojaAtivaId].nome}</b>?\nTodo o histórico de EANs desta loja será perdido.`, true, () => {
+                delete bancoLojas[lojaAtivaId];
+                lojaAtivaId = 'default';
+                salvarCofreLojas();
+                atualizarSelectLojas();
+                trocarLoja(true); 
+            });
         }
 
         function atualizarUI_Memoria() {
@@ -529,17 +612,20 @@
                 validarPrefixoGS1();
                 if(!silencioso) uiAlert("Base Sincronizada", `A base da loja <b>${loja.nome}</b> foi sincronizada com sucesso!`);
             } else if (!silencioso) {
-                uiAlert("Sem Histórico", `A loja <b>${loja.nome}</b> ainda não possui histórico salvo. Digite a base manualmente.`);
+                uiAlert("Sem Histórico", `A loja <b>${loja.nome}</b> ainda não possui histórico de cálculos salvo. Comece com a base gerada na configuração inicial.`);
             }
         }
 
         function limparMemoriaInterna() {
             uiAlert("Limpar Memória da Loja", `Tem certeza que deseja apagar o contador da loja <b>${bancoLojas[lojaAtivaId].nome}</b>?\nUse isso apenas se quiser recomeçar a sequência desta loja do zero.`, true, () => {
-                bancoLojas[lojaAtivaId].ultimoEan = null;
-                bancoLojas[lojaAtivaId].base12 = null;
+                const loja = bancoLojas[lojaAtivaId];
+                loja.ultimoEan = null;
+                // Volta para o prefixo zerado se existir
+                loja.base12 = loja.prefixoLoja ? loja.prefixoLoja.padEnd(12, '0') : null;
+                
                 salvarCofreLojas();
                 atualizarUI_Memoria();
-                document.getElementById('codigoBase').value = "";
+                document.getElementById('codigoBase').value = loja.base12 || "";
                 fonteBaseAtual = "manual";
                 validarPrefixoGS1();
                 uiAlert("Pronto", "Memória da loja limpa com sucesso!");
@@ -553,7 +639,12 @@
             
             if (val.length >= 3) {
                 aviso.style.display = "block";
-                if (!val.startsWith('789') && !val.startsWith('790')) {
+                const loja = bancoLojas[lojaAtivaId];
+                
+                if (loja.prefixoLoja && !val.startsWith(loja.prefixoLoja)) {
+                    aviso.innerHTML = `⚠️ Atenção: A base difere do prefixo da loja (${loja.prefixoLoja}).`;
+                    aviso.style.color = "#d97706"; 
+                } else if (!val.startsWith('789') && !val.startsWith('790')) {
                     aviso.innerHTML = "⚠️ Atenção: Padrão GS1 Brasil costuma iniciar com 789 ou 790.";
                     aviso.style.color = "#d97706"; 
                 } else {
@@ -576,16 +667,17 @@
             calcularFila();
             const modo = document.querySelector('input[name="modo_acao"]:checked').value;
             const inputBase = document.getElementById('codigoBase');
+            const loja = bancoLojas[lojaAtivaId];
 
             if (modo === 'todos') {
                 if (fonteBaseAtual === 'auto') {
-                    inputBase.value = "";
+                    inputBase.value = loja.base12 ? (BigInt(loja.base12) + 1n).toString().padStart(12, '0') : (loja.prefixoLoja ? loja.prefixoLoja.padEnd(12, '0') : "");
                     fonteBaseAtual = "manual";
                     validarPrefixoGS1();
-                    uiAlert("Mudança de Estratégia", "Como você escolheu 'Substituir Tudo', a base detectada da planilha foi limpa para evitar a geração de EANs repetidos.\n\nPor favor, digite uma nova base ou clique em 'Sincronizar Base'.");
+                    uiAlert("Mudança de Estratégia", "Como você escolheu 'Substituir Tudo', a base lida da planilha foi trocada pela memória da loja para garantir uma sequência limpa e nova.");
                 }
             } else {
-                if (inputBase.value === "" && baseAutoDetectada !== "") {
+                if (baseAutoDetectada !== "") {
                     inputBase.value = baseAutoDetectada;
                     fonteBaseAtual = "auto";
                     validarPrefixoGS1();
@@ -677,7 +769,21 @@
                 document.getElementById('rxDuplicados').innerText = stats.duplicados;
                 document.getElementById('dashResumo').style.display = 'grid';
 
-                if (maxBaseDetectada > 0n) {
+                const loja = bancoLojas[lojaAtivaId];
+
+                // Lógica de inteligência de detecção baseada no Prefixo da Loja
+                if (loja.prefixoLoja) {
+                    let prefixInt = BigInt(loja.prefixoLoja.padEnd(12, '0'));
+                    if (maxBaseDetectada >= prefixInt && String(maxBaseDetectada).startsWith(loja.prefixoLoja)) {
+                        baseAutoDetectada = (maxBaseDetectada + 1n).toString().padStart(12, '0');
+                    } else if (loja.base12) {
+                        baseAutoDetectada = (BigInt(loja.base12) + 1n).toString().padStart(12, '0');
+                    } else {
+                        baseAutoDetectada = loja.prefixoLoja.padEnd(12, '0');
+                    }
+                    document.getElementById('codigoBase').value = baseAutoDetectada;
+                    fonteBaseAtual = "auto";
+                } else if (maxBaseDetectada > 0n) {
                     baseAutoDetectada = (maxBaseDetectada + 1n).toString().padStart(12, '0');
                     document.getElementById('codigoBase').value = baseAutoDetectada;
                     fonteBaseAtual = "auto";
@@ -685,8 +791,8 @@
                     baseAutoDetectada = "";
                     puxarMemoria(true);
                 }
+                
                 validarPrefixoGS1();
-
                 calcularFila(); 
 
             } catch (error) { uiAlert("Erro", "Falha ao ler o arquivo Excel."); }
@@ -719,34 +825,45 @@
             return `Término previsto: ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
         }
 
+        // MOTOR CENTRAL DE DISTRIBUIÇÃO - Evita Condição de Corrida (Race Condition)
+        function obterProximoEanLivre() {
+            let eanValido = false;
+            let novoEan = "";
+            let b12 = "";
+            
+            while (!eanValido) {
+                b12 = sequenciaGlobalAtual.toString().padStart(12, '0');
+                novoEan = b12 + calcularDigitoVerificador(b12);
+                
+                sequenciaGlobalAtual++; 
+                
+                // Reserva imediata: Impede que outro processo concorrente pegue este EAN
+                if (!setEansExistentesGlobal.has(novoEan)) {
+                    setEansExistentesGlobal.add(novoEan);
+                    eanValido = true;
+                }
+            }
+            return novoEan;
+        }
+
         function gerarTabela() {
             if (validacaoEmAndamento) return;
             const tbody = document.getElementById('corpoTabela');
             if (filaDeInjecao.length === 0) return uiAlert("Atenção", "Não há produtos na fila para a regra selecionada.\nVerifique a planilha ou altere o Modo de Correção.");
             
             let base = document.getElementById('codigoBase').value.replace(/\D/g, '');
-            if (base.length !== 12) return uiAlert("Formato Incorreto", "O Código Base precisa ter exatamente 12 números (Prefixo).");
+            if (base.length !== 12) return uiAlert("Formato Incorreto", "O Código Base precisa ter exatamente 12 números (Prefixo da Loja).");
 
             document.getElementById('statusContainer').style.display = 'none';
             tbody.innerHTML = ""; 
             
-            let seq = BigInt(base);
+            // Inicializa a Trava Central com a Base atual
+            sequenciaGlobalAtual = BigInt(base);
             let fragment = document.createDocumentFragment();
 
             filaDeInjecao.forEach((item, i) => {
-                let eanValido = false;
-                let b12, ean;
                 
-                while (!eanValido) {
-                    b12 = seq.toString().padStart(12, '0');
-                    ean = b12 + calcularDigitoVerificador(b12);
-                    
-                    if (setEansExistentesGlobal.has(ean)) {
-                        seq++; 
-                    } else {
-                        eanValido = true;
-                    }
-                }
+                let ean = obterProximoEanLivre(); // Pede um EAN seguro e único à Trava Central
                 
                 item.eanGerado = ean;
                 item.statusValidacao = 'pendente';
@@ -762,7 +879,6 @@
                     </td>
                 `;
                 fragment.appendChild(tr);
-                seq++; 
             });
             tbody.appendChild(fragment);
         }
@@ -770,6 +886,7 @@
         function travarInterface(travado) {
             document.querySelectorAll('.painel-controles input, .painel-controles button').forEach(el => el.disabled = travado);
             document.getElementById('selectLoja').disabled = travado;
+            document.querySelectorAll('.seletor-loja button').forEach(el => el.disabled = travado);
         }
 
         function alternarPausa() {
@@ -843,7 +960,6 @@
                         const controller = new AbortController();
                         const timeoutId = setTimeout(() => controller.abort(), 10000); 
 
-                        // NOVO: Chama a URL do Proxy Cloudflare
                         let res = await fetch(`${URL_DO_PROXY}/${ean}`, { 
                             headers: { 'X-Cosmos-Token': API_TOKEN },
                             signal: controller.signal
@@ -852,11 +968,8 @@
                         clearTimeout(timeoutId);
 
                         if (res.status === 200) { 
-                            let base12Ativa = BigInt(ean.substring(0, 12));
-                            base12Ativa++; 
-                            
-                            let novoB12 = base12Ativa.toString().padStart(12, '0');
-                            ean = novoB12 + calcularDigitoVerificador(novoB12); 
+                            // EAN EM USO: Pede um NOVO número à Trava Central
+                            ean = obterProximoEanLivre();
                             
                             filaDeInjecao[i].eanGerado = ean; 
                             linha.querySelector('.codigo-ean').innerText = ean; 
@@ -894,7 +1007,6 @@
                             
                             if (!isPausadoManual && !validacaoCancelada) {
                                 alternarPausa(); 
-                                // NOVA MENSAGEM: Sem mencionar extensões
                                 let mensagemQueda = "Sua conexão com a internet caiu ou houve uma falha de rede.\n\n1. Verifique sua conexão.\n2. Clique no botão abaixo para retomar de onde parou.";
                                 
                                 let retomar = await uiConfirmAsync("Conexão Interrompida ⚠️", mensagemQueda, "✅ Conexão ok, retomar!");

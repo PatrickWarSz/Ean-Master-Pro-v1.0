@@ -280,7 +280,7 @@
                     <input type="text" id="codigoBase" placeholder="Ex: 789000000000" maxlength="12" oninput="atualizarContador(true)" data-tooltip="Siga o padrão GS1 global.">
                     <div class="dica-input">
                         Padrão: <b>789</b>(País) + <b>CNPJ</b> + <b>0000</b>(Sequência)<br>
-                        <i>Detectado automatically pela planilha ou memória.</i>
+                        <i>Detectado automaticamente pela planilha ou memória.</i>
                     </div>
                 </div>
                 
@@ -503,6 +503,7 @@
         let shopeeVarIdCol = 3;
         let todosProdutos = []; 
         let filaDeInjecao = []; 
+        let setEansExistentesGlobal = new Set(); // NOVO: Variável global para checagem rápida
 
         async function lerPlanilha(event) {
             const file = event.target.files[0];
@@ -534,7 +535,7 @@
                 }
 
                 todosProdutos = [];
-                let setEansExistentes = new Set();
+                setEansExistentesGlobal = new Set(); // Limpa e prepara o set global
                 let stats = { total: 0, ok: 0, vazios: 0, duplicados: 0 };
                 let maxBaseDetectada = 0n;
 
@@ -553,11 +554,11 @@
                             if (isVazio) {
                                 stats.vazios++;
                             } else {
-                                if (setEansExistentes.has(eanAtual)) {
+                                if (setEansExistentesGlobal.has(eanAtual)) {
                                     stats.duplicados++;
                                     isDuplicado = true;
                                 } else {
-                                    setEansExistentes.add(eanAtual);
+                                    setEansExistentesGlobal.add(eanAtual);
                                     stats.ok++;
                                 }
                                 
@@ -634,10 +635,22 @@
             let fragment = document.createDocumentFragment();
 
             filaDeInjecao.forEach((item, i) => {
-                let b12 = seq.toString().padStart(12, '0');
-                let ean = b12 + calcularDigitoVerificador(b12);
+                let eanValido = false;
+                let b12, ean;
                 
-                // NOVO: Salvando na Memória do Objeto
+                // NOVO: Pular EANs da própria planilha
+                while (!eanValido) {
+                    b12 = seq.toString().padStart(12, '0');
+                    ean = b12 + calcularDigitoVerificador(b12);
+                    
+                    // Verifica se o EAN já existe noutro campo da mesma folha de cálculo
+                    if (setEansExistentesGlobal.has(ean)) {
+                        seq++; // Se existir, pula imediatamente para o próximo!
+                    } else {
+                        eanValido = true;
+                    }
+                }
+                
                 item.eanGerado = ean;
                 item.statusValidacao = 'pendente';
 
@@ -652,7 +665,7 @@
                     </td>
                 `;
                 fragment.appendChild(tr);
-                seq++;
+                seq++; // Prepara a sequência para o próximo item do loop
             });
             tbody.appendChild(fragment);
         }
@@ -702,7 +715,7 @@
 
             for (let i = 0; i < total; i++) {
                 let linha = linhas[i];
-                let ean = linha.querySelector('.codigo-ean').innerText;
+                let ean = filaDeInjecao[i].eanGerado; // NOVO: Lemos da Memória Central
                 let celulaStatus = linha.querySelector('td:nth-child(3)');
 
                 while (isPausadoManual) {
@@ -755,11 +768,19 @@
                         clearTimeout(timeoutId);
 
                         if (res.status === 200) { 
-                            filaDeInjecao[i].statusValidacao = 'em_uso';
-                            let data = await res.json();
-                            let nomeProduto = data.description ? data.description.substring(0, 25) + '...' : 'Nome não disponível';
-                            celulaStatus.innerHTML = `<span class="badge badge-usado" title="${data.description || ''}">🔴 Em Uso</span><br><span style="font-size:10px; color:#dc2626; font-weight:bold;">${nomeProduto}</span>`; 
-                            processado = true; 
+                            // NOVO: A Mágica da Auto-Correção!
+                            let base12Ativa = BigInt(ean.substring(0, 12));
+                            base12Ativa++; // Incrementa +1 ao EAN que falhou
+                            
+                            let novoB12 = base12Ativa.toString().padStart(12, '0');
+                            ean = novoB12 + calcularDigitoVerificador(novoB12); // Atualiza a variável local
+                            
+                            filaDeInjecao[i].eanGerado = ean; // Guarda a alteração na memória central
+                            linha.querySelector('.codigo-ean').innerText = ean; // Mostra ao utilizador a mudança
+                            celulaStatus.innerHTML = `<span class="badge badge-buscando">🔄 Recalculando...</span>`;
+                            
+                            await new Promise(r => setTimeout(r, 600)); // Pequena pausa para proteger o Cosmos
+                            // Nota: Não colocamos 'processado = true'. O loop while vai testar o novo EAN!
                         } 
                         else if (res.status === 404) { 
                             filaDeInjecao[i].statusValidacao = 'aprovado';

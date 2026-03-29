@@ -988,9 +988,19 @@
                             processado = true;
                             limiteAtingido = true;
                             break; 
-                        } else { 
+                        }
+                        else if (res.status === 401) {
+                            validacaoCancelada = true;
+                            uiAlert("Erro de Autenticação 🛑", "O seu Token da API Cosmos é inválido ou expirou.\n\nPor favor, clique no botão '⚙️ API' no topo da tela para reconfigurar sua chave.");
+                            celulaStatus.innerHTML = `<span class="badge badge-erro">Erro de Token</span>`;
+                            break;
+                        }
+                        else if (res.status >= 500) {
+                            throw new Error("Erro no Servidor Cosmos");
+                        } 
+                        else { 
                             filaDeInjecao[i].statusValidacao = 'aprovado';
-                            celulaStatus.innerHTML = `<span class="badge badge-offline">✅ Aprovado</span>`; 
+                            celulaStatus.innerHTML = `<span class="badge badge-offline">✅ Aprovado (Forçado)</span>`; 
                             processado = true; 
                         }
                     } catch (e) { 
@@ -1003,7 +1013,7 @@
                             
                             if (!isPausadoManual && !validacaoCancelada) {
                                 alternarPausa(); 
-                                let mensagemQueda = "Sua conexão com a internet caiu ou houve uma falha de rede.\n\n1. Verifique sua conexão.\n2. Clique no botão abaixo para retomar de onde parou.";
+                                let mensagemQueda = "A comunicação com o banco de dados falhou (Sem internet ou servidor instável).\n\n1. Verifique sua conexão.\n2. Clique em Retomar para tentar novamente.";
                                 
                                 let retomar = await uiConfirmAsync("Conexão Interrompida ⚠️", mensagemQueda, "✅ Conexão ok, retomar!");
                                 

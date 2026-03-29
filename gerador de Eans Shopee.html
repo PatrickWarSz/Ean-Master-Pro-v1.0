@@ -108,7 +108,6 @@
         .btn-magico { background-color: #6366f1; color: white; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-weight: bold; height: 50px; margin-top: 25px; transition: 0.2s; white-space: nowrap; font-size: 13px;}
         .btn-magico:hover { background-color: #4f46e5; }
 
-        /* NOVA ESTILIZAÇÃO DO BOTÃO DE RISCO (SUBSTITUI O FLASH) */
         .box-flash { display: flex; justify-content: flex-end; margin-bottom: 15px; }
         .label-flash { font-size: 12px; color: #92400e; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; background: #fef3c7; padding: 8px 15px; border-radius: 8px; border: 1px solid #fcd34d; transition: 0.2s; }
         .label-flash:hover { background: #fde68a; }
@@ -281,7 +280,7 @@
                     <input type="text" id="codigoBase" placeholder="Ex: 789000000000" maxlength="12" oninput="atualizarContador(true)" data-tooltip="Siga o padrão GS1 global.">
                     <div class="dica-input">
                         Padrão: <b>789</b>(País) + <b>CNPJ</b> + <b>0000</b>(Sequência)<br>
-                        <i>Detectado automaticamente pela planilha ou memória.</i>
+                        <i>Detectado automatically pela planilha ou memória.</i>
                     </div>
                 </div>
                 
@@ -637,11 +636,16 @@
             filaDeInjecao.forEach((item, i) => {
                 let b12 = seq.toString().padStart(12, '0');
                 let ean = b12 + calcularDigitoVerificador(b12);
+                
+                // NOVO: Salvando na Memória do Objeto
+                item.eanGerado = ean;
+                item.statusValidacao = 'pendente';
+
                 let tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${i+1}</td>
-                    <td class="codigo-ean">${ean}</td>
-                    <td><span class="badge badge-pendente">⏳ Aguardando</span></td>
+                    <td class="codigo-ean" id="ean-visual-${i}">${ean}</td>
+                    <td><span class="badge badge-pendente" id="status-badge-${i}">⏳ Aguardando</span></td>
                     <td class="produto-nome">
                         <span class="id-label">Prod:</span> ${item.idProd}<br>
                         <span class="id-label">Var:</span> ${item.idVar}
@@ -707,6 +711,7 @@
                 }
 
                 if (isModoOfflineRisk) {
+                    filaDeInjecao[i].statusValidacao = 'offline';
                     celulaStatus.innerHTML = `<span class="badge badge-offline">✅ Aprovado</span>`;
                     if (i === total - 1) {
                         progresso.innerText = `Geração Concluída com Sucesso!`;
@@ -750,22 +755,33 @@
                         clearTimeout(timeoutId);
 
                         if (res.status === 200) { 
+                            filaDeInjecao[i].statusValidacao = 'em_uso';
                             let data = await res.json();
                             let nomeProduto = data.description ? data.description.substring(0, 25) + '...' : 'Nome não disponível';
                             celulaStatus.innerHTML = `<span class="badge badge-usado" title="${data.description || ''}">🔴 Em Uso</span><br><span style="font-size:10px; color:#dc2626; font-weight:bold;">${nomeProduto}</span>`; 
                             processado = true; 
                         } 
-                        else if (res.status === 404) { celulaStatus.innerHTML = `<span class="badge badge-livre">Livre</span>`; processado = true; } 
+                        else if (res.status === 404) { 
+                            filaDeInjecao[i].statusValidacao = 'aprovado';
+                            celulaStatus.innerHTML = `<span class="badge badge-livre">Livre</span>`; 
+                            processado = true; 
+                        } 
                         else if (res.status === 429) {
                             for(let j = i; j < total; j++) {
+                                filaDeInjecao[j].statusValidacao = 'offline';
                                 linhas[j].querySelector('td:nth-child(3)').innerHTML = `<span class="badge badge-offline">✅ Aprovado (Limite API)</span>`;
                             }
                             processado = true;
                             limiteAtingido = true;
                             break; 
-                        } else { celulaStatus.innerHTML = `<span class="badge badge-offline">✅ Aprovado</span>`; processado = true; }
+                        } else { 
+                            filaDeInjecao[i].statusValidacao = 'aprovado';
+                            celulaStatus.innerHTML = `<span class="badge badge-offline">✅ Aprovado</span>`; 
+                            processado = true; 
+                        }
                     } catch (e) { 
                         if (e.name === 'AbortError') {
+                            filaDeInjecao[i].statusValidacao = 'offline';
                             celulaStatus.innerHTML = `<span class="badge badge-offline">✅ Aprovado (Timeout)</span>`;
                             processado = true;
                         } else {
@@ -808,20 +824,19 @@
             let eansValidados = [];
             let possuiErro = false;
 
-            document.querySelectorAll('#corpoTabela tr').forEach(tr => {
-                let statusHtml = tr.querySelector('td:nth-child(3)').innerHTML;
-                if(statusHtml.includes("Em Uso")) possuiErro = true;
-                if(statusHtml.includes("Livre") || statusHtml.includes("Aprovado")) {
-                    eansValidados.push(tr.querySelector('.codigo-ean').innerText);
+            filaDeInjecao.forEach(item => {
+                if (item.statusValidacao === 'em_uso' || item.statusValidacao === 'erro') {
+                    possuiErro = true;
+                }
+                if (item.statusValidacao === 'aprovado' || item.statusValidacao === 'offline') {
+                    eansValidados.push(item.eanGerado);
+                    // Injeta na planilha direto da memória
+                    originalWorksheet.getCell(item.rowNum, shopeeGtinColNumber).value = String(item.eanGerado);
                 }
             });
 
             if (possuiErro) return uiAlert("Atenção", "Códigos 'Em Uso' foram encontrados.\nPor favor, altere o Código Base e gere novamente.");
             if (eansValidados.length < filaDeInjecao.length) return uiAlert("Atenção", "Você precisa validar a lista completa antes de baixar o arquivo.");
-
-            filaDeInjecao.forEach((item, index) => {
-                originalWorksheet.getCell(item.rowNum, shopeeGtinColNumber).value = String(eansValidados[index]);
-            });
 
             const ultimoEan = eansValidados[eansValidados.length - 1];
             localStorage.setItem('ean_memoria_interna', JSON.stringify({ ean: ultimoEan, base12: ultimoEan.substring(0, 12) }));

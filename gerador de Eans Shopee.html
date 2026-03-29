@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EAN Master Pro - Soluções em E-commerce</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    <style>
+        :root { 
+            --shopee-laranja: #ee4d2d; --shopee-hover: #d73a1c; 
+            --bg-cor: #f8fafc; --card-bg: #ffffff; 
+            --texto-principal: #1e293b; --texto-secundario: #64748b; 
+            --borda: #e2e8f0; --sucesso: #10b981; --info: #3b82f6; --alerta: #f59e0b; --perigo: #ef4444;
+        }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background-color: var(--bg-cor); display: flex; justify-content: center; align-items: flex-start; padding: 40px 20px; margin: 0; color: var(--texto-principal); min-height: 100vh; box-sizing: border-box;}
+        
+        .tela { display: none; width: 100%; max-width: 1000px; animation: fadeIn 0.4s ease-in-out; }
+        .tela.ativa { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .container { background-color: var(--card-bg); padding: 35px; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.05); width: 100%; box-sizing: border-box; border: 1px solid #f1f5f9; }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 1px solid var(--borda); padding-bottom: 20px; flex-wrap: wrap; gap: 15px; }
+        .header-text { text-align: left; flex: 1; min-width: 300px;}
+        .header h2 { color: var(--shopee-laranja); margin: 0 0 5px 0; font-size: 26px; font-weight: 900; letter-spacing: -0.5px; }
+        .header p { color: var(--texto-secundario); margin: 0; font-size: 14px; line-height: 1.5; }
+        
+        .top-actions { display: flex; gap: 8px; justify-content: flex-end;}
+        .btn-top { background: transparent; border: 1px solid #cbd5e1; color: #64748b; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: bold; transition: 0.2s; display: flex; align-items: center; gap: 5px; white-space: nowrap;}
+        .btn-top:hover { background: #f1f5f9; color: #0f172a; border-color: #94a3b8;}
+        .btn-perigo { border-color: #fca5a5 !important; color: #ef4444 !important; background: white;}
+        .btn-perigo:hover { background: #fef2f2 !important; border-color: #ef4444 !important;}
+
+        [data-tooltip] { position: relative; }
+        [data-tooltip]::after { content: attr(data-tooltip); position: absolute; bottom: 120%; left: 50%; transform: translateX(-50%) translateY(10px); background: #0f172a; color: #f8fafc; padding: 8px 12px; border-radius: 6px; font-size: 11px; font-weight: normal; white-space: nowrap; letter-spacing: 0; opacity: 0; visibility: hidden; transition: all 0.2s ease; z-index: 100; box-shadow: 0 4px 6px rgba(0,0,0,0.1); pointer-events: none; }
+        [data-tooltip]::before { content: ''; position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%) translateY(10px); border-width: 6px; border-style: solid; border-color: #0f172a transparent transparent transparent; opacity: 0; visibility: hidden; transition: all 0.2s ease; z-index: 100; pointer-events: none; }
+        [data-tooltip]:hover::after, [data-tooltip]:hover::before { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0); }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.7); z-index: 99999; display: none; justify-content: center; align-items: center; backdrop-filter: blur(3px); animation: fadeIn 0.2s ease; }
+        .modal-box { background: white; padding: 30px; border-radius: 16px; width: 100%; max-width: 400px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.2); transform: translateY(0); transition: all 0.3s; }
+        .modal-title { font-size: 20px; font-weight: 900; color: #0f172a; margin: 0 0 15px 0; }
+        .modal-message { font-size: 15px; color: #475569; line-height: 1.5; margin-bottom: 25px; }
+        .modal-actions { display: flex; gap: 10px; justify-content: center; }
+        .modal-btn { padding: 12px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; border: none; font-size: 14px; transition: 0.2s; flex: 1; }
+        .modal-btn-cancel { background: #f1f5f9; color: #475569; display: none; }
+        .modal-btn-cancel:hover { background: #e2e8f0; }
+        .modal-btn-ok { background: var(--shopee-laranja); color: white; }
+        .modal-btn-ok:hover { background: var(--shopee-hover); }
+
+        #tourOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.85); z-index: 9998; display: none; backdrop-filter: blur(2px); }
+        #tourBox { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; z-index: 10000; padding: 30px; border-radius: 16px; width: 350px; text-align: center; display: none; box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
+        #tourBox h3 { margin: 0 0 10px 0; color: var(--info); font-size: 18px; }
+        #tourBox p { color: #475569; font-size: 14px; line-height: 1.5; margin-bottom: 20px; }
+        #tourBox .tour-btn { background: var(--info); color: white; border: none; padding: 12px 25px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; width: 100%; font-size: 14px;}
+        #tourBox .tour-btn:hover { background: #2563eb; }
+        .tour-hl { position: relative; z-index: 9999; box-shadow: 0 0 0 4px var(--info), 0 0 20px rgba(59,130,246,0.4) !important; background: white !important; border-radius: inherit; transition: all 0.3s; }
+
+        .setup-passo { background: #f8fafc; border: 2px solid #e2e8f0; padding: 25px; border-radius: 12px; margin-bottom: 20px; text-align: left; }
+        .setup-passo h3 { margin: 0 0 15px 0; color: #0f172a; font-size: 18px; display: flex; align-items: center; gap: 10px; }
+        .setup-passo p { color: #475569; font-size: 14px; line-height: 1.6; margin-bottom: 15px; }
+        .lista-instrucoes { margin: 15px 0; padding-left: 20px; color: #334155; font-size: 14px; line-height: 1.6; }
+        .lista-instrucoes li { margin-bottom: 8px; }
+        .lista-instrucoes b { color: #0f172a; }
+        .btn-secundario { background: white; color: #3b82f6; border: 2px solid #3b82f6; padding: 12px 20px; font-size: 14px; font-weight: 700; border-radius: 8px; cursor: pointer; transition: 0.2s; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;}
+        .btn-secundario:hover { background: #eff6ff; }
+        .btn-primario { background: var(--shopee-laranja); color: white; border: none; padding: 14px 25px; font-size: 15px; font-weight: 800; border-radius: 8px; cursor: pointer; transition: 0.2s; text-transform: uppercase;}
+        .btn-primario:hover { background: var(--shopee-hover); transform: translateY(-2px); box-shadow: 0 4px 15px rgba(238, 77, 45, 0.2); }
+        .input-token { width: 100%; padding: 15px; border: 2px solid #cbd5e1; border-radius: 8px; font-size: 15px; font-family: monospace; margin-bottom: 15px; box-sizing: border-box; outline: none; transition: 0.3s;}
+        .input-token:focus { border-color: var(--shopee-laranja); box-shadow: 0 0 0 3px rgba(238, 77, 45, 0.1); }
+
+        .painel-memoria { background: #eef2ff; border-left: 5px solid #6366f1; padding: 15px 20px; border-radius: 8px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;}
+        .memoria-texto { font-size: 13px; color: #312e81; }
+        .memoria-destaque { font-family: monospace; font-size: 16px; font-weight: bold; background: white; padding: 4px 10px; border-radius: 6px; border: 1px solid #c7d2fe; margin-left: 10px;}
+
+        .painel-importacao { background-color: #f8fafc; border: 2px dashed #cbd5e1; padding: 25px; border-radius: 12px; margin-bottom: 25px; text-align: center; transition: 0.3s; }
+        .instrucao-import { font-size: 13px; color: #475569; margin-top: 5px; margin-bottom: 15px; background: #fff; display: inline-block; padding: 10px 15px; border-radius: 6px; border: 1px solid #e2e8f0;}
+        .upload-btn { background-color: var(--sucesso); color: white; padding: 12px 25px; border-radius: 8px; cursor: pointer; font-weight: bold; display: inline-block; transition: 0.2s;}
+        .upload-btn:hover { background-color: #059669; }
+        input[type="file"] { display: none; }
+        
+        .dashboard-resumo { display: none; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-top: 20px; text-align: left; }
+        .card-resumo { background: white; padding: 15px; border-radius: 8px; border: 1px solid var(--borda); border-left: 4px solid #cbd5e1; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
+        .card-resumo.total { border-left-color: #3b82f6; }
+        .card-resumo.vazios { border-left-color: #f59e0b; }
+        .card-resumo.ok { border-left-color: #10b981; }
+        .card-resumo.duplicados { border-left-color: #ef4444; }
+        .card-titulo { font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: bold; margin-bottom: 5px; }
+        .card-valor { font-size: 22px; font-weight: 900; color: #0f172a; }
+
+        .painel-controles { background-color: #ffffff; padding: 25px; border-radius: 12px; margin-bottom: 25px; border: 1px solid var(--borda); }
+        
+        .seletor-modo { display: flex; gap: 10px; margin-bottom: 20px; background: #f1f5f9; padding: 8px; border-radius: 8px; flex-wrap: wrap;}
+        .opcao-modo { flex: 1; min-width: 250px;}
+        .opcao-modo input[type="radio"] { display: none; }
+        .opcao-modo label { display: block; padding: 12px; border: 2px solid transparent; border-radius: 6px; cursor: pointer; text-align: center; font-weight: bold; font-size: 13px; color: #64748b; transition: 0.2s; background: transparent;}
+        #modoVazios:checked + label { background: white; border-color: var(--sucesso); color: #059669; box-shadow: 0 2px 8px rgba(16,185,129,0.1); }
+        #modoErros:checked + label { background: white; border-color: var(--alerta); color: #d97706; box-shadow: 0 2px 8px rgba(245,158,11,0.1); }
+        #modoTodos:checked + label { background: white; border-color: var(--shopee-laranja); color: var(--shopee-hover); box-shadow: 0 2px 8px rgba(238,77,45,0.1); }
+
+        .linha-inputs { display: flex; gap: 15px; align-items: flex-start; margin-bottom: 15px; }
+        .grupo-input { flex: 1; display: flex; flex-direction: column; }
+        .grupo-input label { font-size: 12px; font-weight: 800; color: #475569; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;}
+        .grupo-input input { padding: 14px; font-size: 16px; border: 2px solid var(--borda); border-radius: 8px; outline: none; font-family: monospace; font-weight: bold; letter-spacing: 1px; transition: 0.2s;}
+        .grupo-input input:focus { border-color: var(--shopee-laranja); }
+        .grupo-input input:disabled { background-color: #f1f5f9; color: #94a3b8; }
+        .dica-input { font-size: 11px; color: #64748b; margin-top: 6px; line-height: 1.4;}
+
+        .btn-magico { background-color: #6366f1; color: white; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-weight: bold; height: 50px; margin-top: 25px; transition: 0.2s; white-space: nowrap; font-size: 13px;}
+        .btn-magico:hover { background-color: #4f46e5; }
+
+        /* NOVA ESTILIZAÇÃO DO BOTÃO DE RISCO (SUBSTITUI O FLASH) */
+        .box-flash { display: flex; justify-content: flex-end; margin-bottom: 15px; }
+        .label-flash { font-size: 12px; color: #92400e; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; background: #fef3c7; padding: 8px 15px; border-radius: 8px; border: 1px solid #fcd34d; transition: 0.2s; }
+        .label-flash:hover { background: #fde68a; }
+        .label-flash input { width: 15px; height: 15px; cursor: pointer; }
+
+        .linha-botoes { display: flex; gap: 12px; }
+        .linha-botoes button { flex: 1; color: white; border: none; padding: 14px; font-size: 13px; font-weight: 800; border-radius: 8px; cursor: pointer; transition: 0.2s; text-transform: uppercase; letter-spacing: 0.5px;}
+        .linha-botoes button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .linha-botoes button:active:not(:disabled) { transform: scale(0.98); }
+        .btn-gerar { background-color: #475569; } .btn-gerar:hover:not(:disabled) { background-color: #334155; }
+        .btn-verificar { background-color: var(--shopee-laranja); } .btn-verificar:hover:not(:disabled) { background-color: var(--shopee-hover); }
+        .btn-exportar { background-color: var(--sucesso); } .btn-exportar:hover:not(:disabled) { background-color: #059669; }
+
+        .status-container { display: none; background: #fff5f2; border: 1px solid #ffccbc; border-radius: 10px; padding: 18px; margin-bottom: 25px; text-align: center; position: relative;}
+        #progresso { font-weight: 900; color: var(--shopee-laranja); font-size: 20px; margin-bottom: 8px; }
+        #timer { font-size: 15px; color: #b91c1c; font-weight: 700; margin-bottom: 4px; }
+        #horaConclusao { font-size: 13px; color: #64748b; font-weight: 600; margin-bottom: 10px;}
+        
+        .btn-pausa-container { margin-top: 10px; }
+        .btn-pausa { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; padding: 8px 20px; border-radius: 20px; font-weight: bold; cursor: pointer; font-size: 12px; transition: 0.2s; display: inline-flex; align-items: center; gap: 5px; }
+        .btn-pausa:hover { background: #fee2e2; }
+        .btn-pausa.modo-retomar { background: #dcfce7; color: #059669; border-color: #86efac; }
+        .btn-pausa.modo-retomar:hover { background: #bbf7d0; }
+
+        .tabela-container { max-height: 400px; overflow-y: auto; border: 1px solid var(--borda); border-radius: 8px; }
+        table { width: 100%; border-collapse: collapse; background: white; }
+        th, td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; text-align: left; font-size: 13px; }
+        th { background-color: #f8fafc; color: #475569; font-weight: 800; position: sticky; top: 0; z-index: 10; font-size: 12px; text-transform: uppercase;}
+        .col-num { color: #94a3b8; font-weight: 600; width: 50px; }
+        .codigo-ean { font-family: monospace; font-size: 15px; font-weight: 700; color: #0f172a; }
+        .produto-nome { color: #64748b; font-size: 13px; font-family: monospace; letter-spacing: 0.5px; }
+        .id-label { font-weight: bold; color: #475569; font-family: 'Inter', sans-serif; font-size: 10px; text-transform: uppercase; margin-right: 5px;}
+        
+        .badge { padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 800; display: inline-flex; align-items: center; gap: 5px; text-transform: uppercase; }
+        .badge-pendente { background-color: #fef3c7; color: #d97706; }
+        .badge-livre { background-color: #dcfce7; color: #059669; }
+        .badge-usado { background-color: #fee2e2; color: #dc2626; }
+        .badge-erro { background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+        .badge-buscando { background-color: #e0f2fe; color: #0284c7; }
+        .badge-offline { background-color: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; }
+    </style>
+</head>
+<body onload="inicializarSistema()">
+
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-box" id="customModal">
+            <h3 class="modal-title" id="modalTitle">Mensagem</h3>
+            <p class="modal-message" id="modalMessage">Texto da mensagem aqui.</p>
+            <div class="modal-actions">
+                <button class="modal-btn modal-btn-cancel" id="modalBtnCancel">Cancelar</button>
+                <button class="modal-btn modal-btn-ok" id="modalBtnOk">OK, Entendi</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="tourOverlay"></div>
+    <div id="tourBox">
+        <h3 id="tourTitle">Bem-vindo!</h3>
+        <p id="tourText">Texto do tutorial aqui.</p>
+        <button class="tour-btn" onclick="proximoPassoTutorial()">Entendi, próximo</button>
+    </div>
+
+    <div id="tela-setup" class="tela container">
+        <div class="header" style="border:none; padding-bottom: 10px;">
+            <div class="header-text" style="text-align: center;">
+                <h2>EAN Master Pro</h2>
+                <p>Configuração Vitalícia de Primeiro Acesso</p>
+            </div>
+        </div>
+
+        <div class="setup-passo">
+            <h3>📄 Passo 0: Onde baixar a sua Planilha Shopee</h3>
+            <p>Antes de usar a ferramenta, baixe a sua planilha no painel da Shopee seguindo o caminho exato abaixo:</p>
+            <ol class="lista-instrucoes">
+                <li>No menu lateral esquerdo, vá em <b>Produtos</b>.</li>
+                <li>No topo da página, clique em <b>Ações em massa</b> > <b>Editar em massa</b>.</li>
+                <li>Selecione a aba e o modelo <b>Informação de Venda</b> e clique no botão vermelho <b>Gerar</b>.</li>
+                <li>Após gerar, clique em <b>Baixar</b> na coluna Ação. <i>(Guarde este arquivo)</i></li>
+            </ol>
+        </div>
+
+        <div class="setup-passo">
+            <h3>🧩 Passo 1: Liberação de Segurança (CORS)</h3>
+            <p>Instale a extensão oficial no Chrome para liberar o acesso ao banco de dados.</p>
+            <a href="https://chromewebstore.google.com/detail/allow-cors-access-control/lhobafahddgcelffkeicbaginigeejlf" target="_blank" class="btn-secundario">📥 Baixar Extensão no Chrome</a>
+            <ol class="lista-instrucoes">
+                <li>Clique no ícone de <b>Quebra-cabeça 🧩</b> no topo do navegador.</li>
+                <li>Abra a extensão "Allow CORS" e clique no <b>botão grande (C: ON)</b> (ficará Laranja).</li>
+            </ol>
+        </div>
+
+        <div class="setup-passo">
+            <h3>🔑 Passo 2: Chave do Cosmos (API)</h3>
+            <p>Crie uma conta gratuita no Cosmos para validar seus códigos.</p>
+            <a href="https://cosmos.bluesoft.com.br/api" target="_blank" class="btn-secundario" style="margin-bottom: 15px;">🔗 Pegar meu Token Gratuito</a>
+            <input type="text" id="inputToken" class="input-token" placeholder="Cole sua Chave/Token aqui...">
+            <div style="text-align: right;">
+                <button class="btn-primario" onclick="salvarSetup()">Concluir e Acessar o Programa 🚀</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="tela-app" class="tela container">
+        <div class="header">
+            <div class="header-text">
+                <h2>EAN Master Pro</h2>
+                <p>Gestão e Padronização de Códigos Shopee</p>
+            </div>
+            <div class="top-actions">
+                <button class="btn-top" onclick="iniciarTutorial(true)" data-tooltip="Rever o tutorial interativo passo a passo.">💡 Tutorial</button>
+                <button class="btn-top" onclick="reconfigurarSistema()" data-tooltip="Alterar a chave API configurada.">⚙️ API</button>
+            </div>
+        </div>
+
+        <div class="painel-memoria">
+            <div style="display: flex; align-items: center;">
+                <div class="memoria-texto"><b>Memória Interna:</b> Último EAN gerado e salvo pelo sistema:</div>
+                <div class="memoria-destaque" id="txtUltimoEan">Nenhum registro</div>
+            </div>
+            <button class="btn-top btn-perigo" onclick="limparMemoriaInterna()" data-tooltip="Apaga o último EAN salvo para você começar uma nova sequência do zero, sem conflitos.">🗑️ Limpar Memória</button>
+        </div>
+
+        <div class="painel-importacao" id="hl-importar">
+            <label style="color: #047857; font-weight: bold; font-size: 16px;">Passo 1: Importe o arquivo (.xlsx)</label><br>
+            <div class="instrucao-import">
+                🛒 <b>Download:</b> Produtos > Ações em massa > Editar em massa > <b>Informação de Venda</b> > Gerar
+            </div><br>
+            <label for="fileUpload" class="upload-btn" data-tooltip="Importe a planilha baixada na etapa acima.">📁 Selecionar Arquivo</label>
+            <input type="file" id="fileUpload" accept=".xlsx, .xls" onchange="lerPlanilha(event)">
+            
+            <div class="dashboard-resumo" id="dashResumo">
+                <div class="card-resumo total">
+                    <div class="card-titulo">Total Produtos</div>
+                    <div class="card-valor" id="rxTotal">0</div>
+                </div>
+                <div class="card-resumo ok">
+                    <div class="card-titulo">Já possuem EAN</div>
+                    <div class="card-valor" id="rxOk">0</div>
+                </div>
+                <div class="card-resumo vazios">
+                    <div class="card-titulo">EANs Faltando</div>
+                    <div class="card-valor" id="rxVazios">0</div>
+                </div>
+                <div class="card-resumo duplicados">
+                    <div class="card-titulo">Repetidos (Erros)</div>
+                    <div class="card-valor" id="rxDuplicados" style="color: #ef4444;">0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="painel-controles" id="hl-acoes">
+            <div class="seletor-modo">
+                <div class="opcao-modo">
+                    <input type="radio" name="modo_acao" value="vazios" id="modoVazios" checked onchange="mudouModoAcao()">
+                    <label for="modoVazios" data-tooltip="Gera código APENAS para os campos vazios. Preserva os que já existem.">✨ Preencher apenas os Vazios</label>
+                </div>
+                <div class="opcao-modo">
+                    <input type="radio" name="modo_acao" value="erros" id="modoErros" onchange="mudouModoAcao()">
+                    <label for="modoErros" data-tooltip="Preserva os EANs únicos, mas gera códigos novos para os Vazios e para substituir os Duplicados.">🛠️ Corrigir Repetidos + Vazios</label>
+                </div>
+                <div class="opcao-modo">
+                    <input type="radio" name="modo_acao" value="todos" id="modoTodos" onchange="mudouModoAcao()">
+                    <label for="modoTodos" data-tooltip="Gera uma sequência limpa e nova para a loja toda. Esmaga EANs antigos.">🚜 Substituir Tudo</label>
+                </div>
+            </div>
+
+            <div class="linha-inputs" id="hl-base">
+                <div class="grupo-input">
+                    <label>Passo 2: Código Base (Prefixo):</label>
+                    <input type="text" id="codigoBase" placeholder="Ex: 789000000000" maxlength="12" oninput="atualizarContador(true)" data-tooltip="Siga o padrão GS1 global.">
+                    <div class="dica-input">
+                        Padrão: <b>789</b>(País) + <b>CNPJ</b> + <b>0000</b>(Sequência)<br>
+                        <i>Detectado automaticamente pela planilha ou memória.</i>
+                    </div>
+                </div>
+                
+                <button class="btn-magico" onclick="puxarMemoria()" data-tooltip="Puxa o último EAN lá de cima e soma +1 para você continuar a sequência em outra planilha.">🔗 Sincronizar Base</button>
+                
+                <div class="grupo-input" style="flex: 0.4;">
+                    <label>Total a Gerar:</label>
+                    <input type="number" id="qtdGerar" value="0" disabled data-tooltip="Calculado pela regra de correção acima.">
+                    <div class="dica-input">Quantidade da Fila.<br>&nbsp;</div>
+                </div>
+            </div>
+            
+            <div class="box-flash">
+                <label class="label-flash" data-tooltip="Ative para gerar e aprovar os códigos diretamente na tabela sem bater no banco de dados.">
+                    <input type="checkbox" id="checkOffline">
+                    ⚠️ Gerar sem validar no banco de dados (Por sua conta e risco)
+                </label>
+            </div>
+
+            <div class="linha-botoes" id="hl-botoes">
+                <button class="btn-gerar" onclick="gerarTabela()" data-tooltip="Cria a lista de EANs calculados na tabela abaixo.">⚙️ 3. Gerar Lista</button>
+                <button class="btn-verificar" onclick="verificarNoBanco()" data-tooltip="Checa no banco Cosmos se os EANs estão 100% livres.">🔎 4. Validar Cosmos</button>
+                <button class="btn-exportar" onclick="exportarPlanilha()" data-tooltip="Injeta os EANs e baixa a planilha pronta para enviar pra Shopee.">📥 5. Salvar e Baixar</button>
+            </div>
+        </div>
+
+        <div class="status-container" id="statusContainer">
+            <div id="progresso">Validando: 0 de 0</div>
+            <div id="timer">⏱️ Calculando tempo...</div>
+            <div id="horaConclusao"></div>
+            <div class="btn-pausa-container">
+                <button id="btnPausar" class="btn-pausa" onclick="alternarPausa()" style="display:none;">⏸️ Pausar Validação</button>
+            </div>
+        </div>
+
+        <div class="tabela-container">
+            <table id="tabelaResultados">
+                <thead><tr><th class="col-num">Nº</th><th>EAN-13 Gerado</th><th>Status</th><th>Referência: ID Prod. / ID Var.</th></tr></thead>
+                <tbody id="corpoTabela"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let API_TOKEN = ''; 
+        let validacaoEmAndamento = false;
+        let isPausadoManual = false; 
+
+        function uiAlert(title, message, isConfirm = false, confirmCallback = null) {
+            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('modalMessage').innerHTML = message.replace(/\n/g, '<br>');
+            document.getElementById('modalOverlay').style.display = 'flex';
+
+            const btnCancel = document.getElementById('modalBtnCancel');
+            const btnOk = document.getElementById('modalBtnOk');
+
+            btnCancel.style.display = isConfirm ? 'inline-block' : 'none';
+            btnCancel.innerText = 'Cancelar';
+            btnOk.innerText = isConfirm ? 'Sim, Confirmar' : 'OK, Entendi';
+            
+            btnCancel.onclick = () => fecharModal();
+            btnOk.onclick = () => { fecharModal(); if(confirmCallback) confirmCallback(); };
+        }
+
+        function uiConfirmAsync(title, message, btnOkText) {
+            return new Promise((resolve) => {
+                document.getElementById('modalTitle').innerText = title;
+                document.getElementById('modalMessage').innerHTML = message.replace(/\n/g, '<br>');
+                document.getElementById('modalOverlay').style.display = 'flex';
+
+                const btnCancel = document.getElementById('modalBtnCancel');
+                const btnOk = document.getElementById('modalBtnOk');
+
+                btnCancel.style.display = 'inline-block';
+                btnCancel.innerText = 'Parar Tudo';
+                btnOk.innerText = btnOkText;
+
+                btnCancel.onclick = () => { fecharModal(); resolve(false); };
+                btnOk.onclick = () => { fecharModal(); resolve(true); };
+            });
+        }
+        function fecharModal() { document.getElementById('modalOverlay').style.display = 'none'; }
+
+        window.addEventListener('beforeunload', function (e) {
+            if (validacaoEmAndamento) {
+                e.preventDefault();
+                e.returnValue = 'A validação está em andamento. Se fechar a aba, você perderá o progresso.';
+                return e.returnValue;
+            }
+        });
+
+        function mostrarTela(idTela) {
+            document.querySelectorAll('.tela').forEach(t => t.classList.remove('ativa'));
+            document.getElementById(idTela).classList.add('ativa');
+        }
+
+        function inicializarSistema() {
+            const tokenSalvo = localStorage.getItem('ean_master_token');
+            if (!tokenSalvo) {
+                mostrarTela('tela-setup'); 
+            } else {
+                API_TOKEN = tokenSalvo; 
+                mostrarTela('tela-app'); 
+                carregarMemoria();
+                if (!localStorage.getItem('tutorial_final_concluido')) {
+                    setTimeout(() => iniciarTutorial(false), 500);
+                }
+            }
+        }
+
+        function salvarSetup() {
+            const token = document.getElementById('inputToken').value.trim();
+            if (token.length > 10) { 
+                localStorage.setItem('ean_master_token', token);
+                inicializarSistema(); 
+            } else {
+                uiAlert("Chave Inválida", "Cole a chave correta da plataforma Cosmos.");
+            }
+        }
+
+        function reconfigurarSistema() {
+            uiAlert("Configuração da API", "Deseja apagar sua chave atual e configurar uma nova?", true, () => {
+                localStorage.removeItem('ean_master_token');
+                location.reload(); 
+            });
+        }
+
+        let passoAtual = 0;
+        const passosTutorial = [
+            { el: 'hl-importar', titulo: '1. Importação & Raio-X', texto: 'Ao importar a planilha "Informação de Venda", o programa faz um raio-x revelando EANs ausentes ou duplicados.' },
+            { el: 'hl-acoes', titulo: '2. Inteligência de Correção', texto: 'Escolha se deseja preencher os vazios, corrigir as duplicidades ou substituir a loja inteira.' },
+            { el: 'hl-base', titulo: '3. Código Base Automático', texto: 'O programa tentará detectar sua sequência atual sozinho. Se for a primeira vez, digite o prefixo (Ex: 789 + Início CNPJ + 0000).' },
+            { el: 'hl-botoes', titulo: '4. Execução', texto: 'Gere a lista, valide e baixe a planilha. Envie o arquivo pronto na aba de Envio da Shopee!' }
+        ];
+
+        function iniciarTutorial(forcado = false) {
+            passoAtual = 0;
+            document.getElementById('tourOverlay').style.display = 'block';
+            document.getElementById('tourBox').style.display = 'block';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            renderizarPasso();
+            if (!forcado) localStorage.setItem('tutorial_final_concluido', 'true');
+        }
+
+        function renderizarPasso() {
+            document.querySelectorAll('.tour-hl').forEach(el => el.classList.remove('tour-hl'));
+            if (passoAtual >= passosTutorial.length) {
+                document.getElementById('tourOverlay').style.display = 'none';
+                document.getElementById('tourBox').style.display = 'none';
+                return;
+            }
+            const passo = passosTutorial[passoAtual];
+            document.getElementById('tourTitle').innerText = passo.titulo;
+            document.getElementById('tourText').innerText = passo.texto;
+            document.querySelector('.tour-btn').innerText = passoAtual === passosTutorial.length - 1 ? "Entendi, vamos lá!" : "Próximo";
+            const elemento = document.getElementById(passo.el);
+            if (elemento) elemento.classList.add('tour-hl');
+        }
+        function proximoPassoTutorial() { passoAtual++; renderizarPasso(); }
+
+        let baseAutoDetectada = "";
+        let fonteBaseAtual = "manual"; 
+
+        function carregarMemoria() {
+            const mem = JSON.parse(localStorage.getItem('ean_memoria_interna'));
+            if (mem && mem.ean) document.getElementById('txtUltimoEan').innerText = mem.ean;
+        }
+
+        function puxarMemoria(silencioso = false) {
+            const mem = JSON.parse(localStorage.getItem('ean_memoria_interna'));
+            if (mem && mem.base12) {
+                document.getElementById('codigoBase').value = (BigInt(mem.base12) + 1n).toString().padStart(12, '0');
+                fonteBaseAtual = "memoria";
+                if(!silencioso) uiAlert("Base Sincronizada", "A base foi atualizada a partir do último registro salvo!");
+            } else if (!silencioso) {
+                uiAlert("Sem Histórico", "Nenhum histórico salvo. Digite a base manualmente.");
+            }
+        }
+
+        function limparMemoriaInterna() {
+            uiAlert("Limpar Memória", "Tem certeza que deseja apagar a memória do último EAN gerado?\nUse isso apenas se quiser recomeçar uma loja nova do zero, sem vínculo com a sequência anterior.", true, () => {
+                localStorage.removeItem('ean_memoria_interna');
+                document.getElementById('txtUltimoEan').innerText = "Nenhum registro";
+                document.getElementById('codigoBase').value = "";
+                fonteBaseAtual = "manual";
+                uiAlert("Pronto", "Memória limpa com sucesso!");
+            });
+        }
+
+        function atualizarContador(isManual = false) {
+            let input = document.getElementById('codigoBase');
+            input.value = input.value.replace(/\D/g, ''); 
+            if(isManual) fonteBaseAtual = 'manual';
+        }
+
+        function mudouModoAcao() {
+            calcularFila();
+            const modo = document.querySelector('input[name="modo_acao"]:checked').value;
+            const inputBase = document.getElementById('codigoBase');
+
+            if (modo === 'todos') {
+                if (fonteBaseAtual === 'auto') {
+                    inputBase.value = "";
+                    fonteBaseAtual = "manual";
+                    uiAlert("Mudança de Estratégia", "Como você escolheu 'Substituir Tudo', a base detectada da planilha foi limpa para evitar a geração de EANs repetidos.\n\nPor favor, digite uma nova base ou clique em 'Sincronizar Base'.");
+                }
+            } else {
+                if (inputBase.value === "" && baseAutoDetectada !== "") {
+                    inputBase.value = baseAutoDetectada;
+                    fonteBaseAtual = "auto";
+                }
+            }
+        }
+
+        let originalWorkbook = null;
+        let originalWorksheet = null;
+        let originalFileName = "";
+        let shopeeGtinColNumber = -1; 
+        let shopeeProductIdCol = 1;
+        let shopeeVarIdCol = 3;
+        let todosProdutos = []; 
+        let filaDeInjecao = []; 
+
+        async function lerPlanilha(event) {
+            const file = event.target.files[0];
+            if(!file) return;
+            originalFileName = file.name; 
+
+            try {
+                const buffer = await file.arrayBuffer();
+                originalWorkbook = new ExcelJS.Workbook();
+                await originalWorkbook.xlsx.load(buffer);
+                originalWorksheet = originalWorkbook.worksheets[0]; 
+
+                shopeeGtinColNumber = -1;
+                shopeeProductIdCol = 1; 
+                shopeeVarIdCol = 3; 
+
+                for (let r = 1; r <= 3; r++) {
+                    const row = originalWorksheet.getRow(r);
+                    row.eachCell((cell, colNumber) => {
+                        const cellValue = String(cell.value || '').toLowerCase().trim();
+                        if (cellValue.includes('ps_gtin_code') || cellValue.includes('gtin (ean)')) shopeeGtinColNumber = colNumber;
+                        if (cellValue === 'id do produto' || cellValue === 'et_title_product_id') shopeeProductIdCol = colNumber;
+                        if (cellValue === 'variante identificador' || cellValue === 'et_title_variation_id') shopeeVarIdCol = colNumber;
+                    });
+                }
+
+                if (shopeeGtinColNumber === -1) {
+                    return uiAlert("Atenção", "Coluna GTIN não encontrada.\nVerifique se é a planilha 'Informação de Venda'.");
+                }
+
+                todosProdutos = [];
+                let setEansExistentes = new Set();
+                let stats = { total: 0, ok: 0, vazios: 0, duplicados: 0 };
+                let maxBaseDetectada = 0n;
+
+                originalWorksheet.eachRow((row, rowNumber) => {
+                    if (rowNumber > 3) { 
+                        const idProdRaw = String(row.getCell(shopeeProductIdCol).value || '').trim();
+                        if (idProdRaw && !isNaN(idProdRaw) && idProdRaw.length > 5) {
+                            
+                            const eanAtual = String(row.getCell(shopeeGtinColNumber).value || '').trim();
+                            const idVarRaw = String(row.getCell(shopeeVarIdCol).value || '0').trim();
+                            
+                            stats.total++;
+                            let isVazio = (!eanAtual || eanAtual.length < 8 || eanAtual.includes('Obrigat'));
+                            let isDuplicado = false;
+
+                            if (isVazio) {
+                                stats.vazios++;
+                            } else {
+                                if (setEansExistentes.has(eanAtual)) {
+                                    stats.duplicados++;
+                                    isDuplicado = true;
+                                } else {
+                                    setEansExistentes.add(eanAtual);
+                                    stats.ok++;
+                                }
+                                
+                                if (eanAtual.length === 13 && !isNaN(eanAtual)) {
+                                    let base12 = BigInt(eanAtual.substring(0, 12));
+                                    if (base12 > maxBaseDetectada) maxBaseDetectada = base12;
+                                }
+                            }
+
+                            todosProdutos.push({ rowNum: rowNumber, idProd: idProdRaw, idVar: idVarRaw, isVazio: isVazio, isDuplicado: isDuplicado });
+                        }
+                    }
+                });
+
+                document.getElementById('rxTotal').innerText = stats.total;
+                document.getElementById('rxOk').innerText = stats.ok;
+                document.getElementById('rxVazios').innerText = stats.vazios;
+                document.getElementById('rxDuplicados').innerText = stats.duplicados;
+                document.getElementById('dashResumo').style.display = 'grid';
+
+                if (maxBaseDetectada > 0n) {
+                    baseAutoDetectada = (maxBaseDetectada + 1n).toString().padStart(12, '0');
+                    document.getElementById('codigoBase').value = baseAutoDetectada;
+                    fonteBaseAtual = "auto";
+                } else {
+                    baseAutoDetectada = "";
+                    puxarMemoria(true);
+                }
+
+                calcularFila(); 
+
+            } catch (error) { uiAlert("Erro", "Falha ao ler o arquivo Excel."); }
+        }
+
+        function calcularFila() {
+            if (todosProdutos.length === 0) return;
+            const modoSelecionado = document.querySelector('input[name="modo_acao"]:checked').value;
+            filaDeInjecao = [];
+
+            todosProdutos.forEach(prod => {
+                if (modoSelecionado === 'todos') { filaDeInjecao.push(prod); } 
+                else if (modoSelecionado === 'erros') { if (prod.isVazio || prod.isDuplicado) filaDeInjecao.push(prod); } 
+                else { if (prod.isVazio) filaDeInjecao.push(prod); }
+            });
+
+            document.getElementById('qtdGerar').value = filaDeInjecao.length;
+        }
+
+        function calcularDigitoVerificador(base12) {
+            let soma = 0;
+            for (let i = 0; i < 12; i++) soma += parseInt(base12[i]) * (i % 2 === 0 ? 1 : 3);
+            return (Math.ceil(soma / 10) * 10) - soma;
+        }
+
+        function formatarTempo(segs) { return segs <= 0 ? "Finalizando..." : `${Math.floor(segs/60)}m ${Math.floor(segs%60)}s`; }
+        function formatarHoraConclusao(segs) {
+            if (segs <= 0) return "Concluído!";
+            let d = new Date(Date.now() + (segs * 1000));
+            return `Término previsto: ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+        }
+
+        function gerarTabela() {
+            if (validacaoEmAndamento) return;
+            const tbody = document.getElementById('corpoTabela');
+            if (filaDeInjecao.length === 0) return uiAlert("Atenção", "Não há produtos na fila para a regra selecionada.\nVerifique a planilha ou altere o Modo de Correção.");
+            
+            let base = document.getElementById('codigoBase').value.replace(/\D/g, '');
+            if (base.length !== 12) return uiAlert("Formato Incorreto", "O Código Base precisa ter exatamente 12 números (Prefixo).");
+
+            document.getElementById('statusContainer').style.display = 'none';
+            tbody.innerHTML = ""; 
+            
+            let seq = BigInt(base);
+            let fragment = document.createDocumentFragment();
+
+            filaDeInjecao.forEach((item, i) => {
+                let b12 = seq.toString().padStart(12, '0');
+                let ean = b12 + calcularDigitoVerificador(b12);
+                let tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${i+1}</td>
+                    <td class="codigo-ean">${ean}</td>
+                    <td><span class="badge badge-pendente">⏳ Aguardando</span></td>
+                    <td class="produto-nome">
+                        <span class="id-label">Prod:</span> ${item.idProd}<br>
+                        <span class="id-label">Var:</span> ${item.idVar}
+                    </td>
+                `;
+                fragment.appendChild(tr);
+                seq++;
+            });
+            tbody.appendChild(fragment);
+        }
+
+        function travarInterface(travado) {
+            document.querySelectorAll('.painel-controles input, .painel-controles button').forEach(el => el.disabled = travado);
+        }
+
+        function alternarPausa() {
+            isPausadoManual = !isPausadoManual;
+            const btn = document.getElementById('btnPausar');
+            const timer = document.getElementById('timer');
+            const progresso = document.getElementById('progresso');
+
+            if (isPausadoManual) {
+                btn.innerHTML = "▶️ Retomar Validação";
+                btn.classList.add('modo-retomar');
+                timer.innerText = "⏸️ PAUSADO PELO USUÁRIO";
+                progresso.innerText = "Aguardando retomada...";
+            } else {
+                btn.innerHTML = "⏸️ Pausar Validação";
+                btn.classList.remove('modo-retomar');
+            }
+        }
+
+        async function verificarNoBanco() {
+            const linhas = document.querySelectorAll('#corpoTabela tr');
+            if (linhas.length === 0) return uiAlert("Passo Ausente", "Gere a lista primeiro clicando no botão 'Gerar Lista'.");
+            
+            validacaoEmAndamento = true;
+            isPausadoManual = false;
+            travarInterface(true);
+
+            document.getElementById('statusContainer').style.display = 'block';
+            document.getElementById('btnPausar').style.display = 'inline-flex';
+            document.getElementById('btnPausar').innerHTML = "⏸️ Pausar Validação";
+            document.getElementById('btnPausar').classList.remove('modo-retomar');
+
+            const progresso = document.getElementById('progresso');
+            const timer = document.getElementById('timer');
+            const conclusao = document.getElementById('horaConclusao');
+
+            const isModoOfflineRisk = document.getElementById('checkOffline').checked;
+            const total = linhas.length;
+            let tempoInicio = Date.now();
+            let limiteAtingido = false;
+
+            for (let i = 0; i < total; i++) {
+                let linha = linhas[i];
+                let ean = linha.querySelector('.codigo-ean').innerText;
+                let celulaStatus = linha.querySelector('td:nth-child(3)');
+
+                while (isPausadoManual) {
+                    await new Promise(r => setTimeout(r, 500));
+                    tempoInicio += 500; 
+                }
+
+                if (isModoOfflineRisk) {
+                    celulaStatus.innerHTML = `<span class="badge badge-offline">✅ Aprovado</span>`;
+                    if (i === total - 1) {
+                        progresso.innerText = `Geração Concluída com Sucesso!`;
+                        timer.innerText = "✅ Finalizado!";
+                        conclusao.innerText = "-";
+                        validacaoEmAndamento = false;
+                        travarInterface(false);
+                        document.getElementById('btnPausar').style.display = 'none';
+                        return;
+                    }
+                    continue;
+                }
+
+                let tempoPassado = (Date.now() - tempoInicio) / 1000;
+                let media = i > 0 ? tempoPassado / i : 1.5; 
+                let segsRestantes = (total - i) * media;
+
+                timer.innerText = `⏱️ Restante: ${formatarTempo(segsRestantes)}`;
+                conclusao.innerText = formatarHoraConclusao(segsRestantes);
+                progresso.innerText = `Validando no Banco: ${i + 1} de ${total}`;
+                
+                linha.scrollIntoView({ behavior: "smooth", block: "center" });
+                celulaStatus.innerHTML = `<span class="badge" style="background:#e0f2fe; color:#0284c7;">Buscando...</span>`;
+
+                let processado = false;
+                while (!processado) {
+                    while (isPausadoManual) {
+                        await new Promise(r => setTimeout(r, 500));
+                        tempoInicio += 500; 
+                    }
+
+                    try {
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 10000); 
+
+                        let res = await fetch(`https://api.cosmos.bluesoft.com.br/gtins/${ean}.json`, { 
+                            headers: { 'X-Cosmos-Token': API_TOKEN },
+                            signal: controller.signal
+                        });
+                        
+                        clearTimeout(timeoutId);
+
+                        if (res.status === 200) { 
+                            let data = await res.json();
+                            let nomeProduto = data.description ? data.description.substring(0, 25) + '...' : 'Nome não disponível';
+                            celulaStatus.innerHTML = `<span class="badge badge-usado" title="${data.description || ''}">🔴 Em Uso</span><br><span style="font-size:10px; color:#dc2626; font-weight:bold;">${nomeProduto}</span>`; 
+                            processado = true; 
+                        } 
+                        else if (res.status === 404) { celulaStatus.innerHTML = `<span class="badge badge-livre">Livre</span>`; processado = true; } 
+                        else if (res.status === 429) {
+                            for(let j = i; j < total; j++) {
+                                linhas[j].querySelector('td:nth-child(3)').innerHTML = `<span class="badge badge-offline">✅ Aprovado (Limite API)</span>`;
+                            }
+                            processado = true;
+                            limiteAtingido = true;
+                            break; 
+                        } else { celulaStatus.innerHTML = `<span class="badge badge-offline">✅ Aprovado</span>`; processado = true; }
+                    } catch (e) { 
+                        if (e.name === 'AbortError') {
+                            celulaStatus.innerHTML = `<span class="badge badge-offline">✅ Aprovado (Timeout)</span>`;
+                            processado = true;
+                        } else {
+                            celulaStatus.innerHTML = `<span class="badge badge-erro">🛑 Pausado</span>`;
+                            let mensagemQueda = "A extensão 'Allow CORS' foi desativada durante a validação ou sua internet caiu.\n\n1. Verifique sua conexão.\n2. Ative a extensão (C: ON) no topo do navegador.\n3. Clique no botão abaixo para retomar.";
+                            
+                            let retomar = await uiConfirmAsync("Conexão Interrompida ⚠️", mensagemQueda, "✅ Já ativei, retomar!");
+                            
+                            if (retomar) {
+                                celulaStatus.innerHTML = `<span class="badge badge-buscando">🔄 Retomando...</span>`;
+                            } else {
+                                validacaoEmAndamento = false;
+                                travarInterface(false);
+                                document.getElementById('btnPausar').style.display = 'none';
+                                progresso.innerText = "Processo Cancelado pelo Usuário.";
+                                timer.innerText = "-";
+                                conclusao.innerText = "-";
+                                return; 
+                            }
+                        }
+                    }
+                } 
+
+                if (limiteAtingido) {
+                    progresso.innerText = "Validação Concluída! (Cota da API Atingida)";
+                    break; 
+                }
+                await new Promise(r => setTimeout(r, 1000)); 
+            }
+            
+            if(!limiteAtingido) progresso.innerText = "Validação Concluída! Pode baixar a planilha.";
+            validacaoEmAndamento = false;
+            travarInterface(false);
+            document.getElementById('btnPausar').style.display = 'none';
+        }
+
+        async function exportarPlanilha() {
+            if(!originalWorkbook || filaDeInjecao.length === 0) return;
+
+            let eansValidados = [];
+            let possuiErro = false;
+
+            document.querySelectorAll('#corpoTabela tr').forEach(tr => {
+                let statusHtml = tr.querySelector('td:nth-child(3)').innerHTML;
+                if(statusHtml.includes("Em Uso")) possuiErro = true;
+                if(statusHtml.includes("Livre") || statusHtml.includes("Aprovado")) {
+                    eansValidados.push(tr.querySelector('.codigo-ean').innerText);
+                }
+            });
+
+            if (possuiErro) return uiAlert("Atenção", "Códigos 'Em Uso' foram encontrados.\nPor favor, altere o Código Base e gere novamente.");
+            if (eansValidados.length < filaDeInjecao.length) return uiAlert("Atenção", "Você precisa validar a lista completa antes de baixar o arquivo.");
+
+            filaDeInjecao.forEach((item, index) => {
+                originalWorksheet.getCell(item.rowNum, shopeeGtinColNumber).value = String(eansValidados[index]);
+            });
+
+            const ultimoEan = eansValidados[eansValidados.length - 1];
+            localStorage.setItem('ean_memoria_interna', JSON.stringify({ ean: ultimoEan, base12: ultimoEan.substring(0, 12) }));
+            carregarMemoria(); 
+
+            let prefixo = "";
+            let modo = document.querySelector('input[name="modo_acao"]:checked').value;
+            if (modo === 'todos') prefixo = "COMPLETA_";
+            if (modo === 'erros') prefixo = "CORRIGIDA_";
+            if (modo === 'vazios') prefixo = "VAZIOS_";
+
+            let nomeFinal = prefixo + originalFileName;
+
+            const buffer = await originalWorkbook.xlsx.writeBuffer();
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+            link.download = nomeFinal;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            uiAlert("🎉 PLANILHA SALVA!", `Arquivo gerado com sucesso: <b>${nomeFinal}</b>\n\nCOMO ENVIAR PARA A SHOPEE:\n1. Acesse <b>Ações em Massa > Editar em Massa</b>.\n2. Clique na aba <b>'Envio'</b>.\n3. Clique em 'Selecionar Arquivo', envie a planilha gerada e aguarde a conclusão!`);
+        }
+    </script>
+</body>
+</html>

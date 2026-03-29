@@ -194,18 +194,8 @@
         </div>
 
         <div class="setup-passo">
-            <h3>🧩 Passo 1: Liberação de Segurança (CORS)</h3>
-            <p>Instale a extensão oficial no Chrome para liberar o acesso ao banco de dados.</p>
-            <a href="https://chromewebstore.google.com/detail/allow-cors-access-control/lhobafahddgcelffkeicbaginigeejlf" target="_blank" class="btn-secundario">📥 Baixar Extensão no Chrome</a>
-            <ol class="lista-instrucoes">
-                <li>Clique no ícone de <b>Quebra-cabeça 🧩</b> no topo do navegador.</li>
-                <li>Abra a extensão "Allow CORS" e clique no <b>botão grande (C: ON)</b> (ficará Laranja).</li>
-            </ol>
-        </div>
-
-        <div class="setup-passo">
-            <h3>🔑 Passo 2: Chave do Cosmos (API)</h3>
-            <p>Crie uma conta gratuita no Cosmos para validar seus códigos.</p>
+            <h3>🔑 Passo 1: Chave do Cosmos (API)</h3>
+            <p>Crie uma conta gratuita no Cosmos para validar seus códigos (sem precisar de instalar extensões!).</p>
             <a href="https://cosmos.bluesoft.com.br/api" target="_blank" class="btn-secundario" style="margin-bottom: 15px;">🔗 Pegar meu Token Gratuito</a>
             <input type="text" id="inputToken" class="input-token" placeholder="Cole sua Chave/Token aqui...">
             <div style="text-align: right;">
@@ -337,11 +327,15 @@
     </div>
 
     <script>
+        // =========================================================
+        const URL_DO_PROXY = "https://proxyeanmaster.gsouzapatrick.workers.dev"; 
+        // =========================================================
+
         let API_TOKEN = ''; 
         let validacaoEmAndamento = false;
         let isPausadoManual = false; 
 
-        // NOVO: Cofre de Lojas
+        // Cofre de Lojas
         let bancoLojas = {
             'default': { nome: 'Loja Principal', ultimoEan: null, base12: null }
         };
@@ -462,13 +456,11 @@
         let baseAutoDetectada = "";
         let fonteBaseAtual = "manual"; 
 
-        // NOVO: Funções do Cofre de Lojas
         function carregarCofreLojas() {
             const salvo = localStorage.getItem('ean_master_lojas');
             if (salvo) {
                 bancoLojas = JSON.parse(salvo);
             } else {
-                // Tenta migrar a memória antiga, se existir
                 const memAntiga = JSON.parse(localStorage.getItem('ean_memoria_interna'));
                 if (memAntiga) {
                     bancoLojas['default'].ultimoEan = memAntiga.ean;
@@ -506,7 +498,7 @@
             lojaAtivaId = document.getElementById('selectLoja').value;
             salvarCofreLojas();
             atualizarUI_Memoria();
-            document.getElementById('codigoBase').value = ""; // Limpa a base ao trocar de loja para evitar mistura
+            document.getElementById('codigoBase').value = ""; 
             fonteBaseAtual = "manual";
             validarPrefixoGS1();
             uiAlert("Loja Alterada", `Você agora está gerenciando: <b>${bancoLojas[lojaAtivaId].nome}</b>`);
@@ -554,7 +546,6 @@
             });
         }
 
-        // NOVO: Validação Visual GS1
         function validarPrefixoGS1() {
             const input = document.getElementById('codigoBase');
             const aviso = document.getElementById('avisoGS1');
@@ -564,10 +555,10 @@
                 aviso.style.display = "block";
                 if (!val.startsWith('789') && !val.startsWith('790')) {
                     aviso.innerHTML = "⚠️ Atenção: Padrão GS1 Brasil costuma iniciar com 789 ou 790.";
-                    aviso.style.color = "#d97706"; // Laranja alerta
+                    aviso.style.color = "#d97706"; 
                 } else {
                     aviso.innerHTML = "✅ Prefixo padrão Brasil detectado.";
-                    aviso.style.color = "#059669"; // Verde sucesso
+                    aviso.style.color = "#059669"; 
                 }
             } else {
                 aviso.style.display = "none";
@@ -610,7 +601,7 @@
         let shopeeVarIdCol = 3;
         let todosProdutos = []; 
         let filaDeInjecao = []; 
-        let setEansExistentesGlobal = new Set();
+        let setEansExistentesGlobal = new Set(); 
 
         async function lerPlanilha(event) {
             const file = event.target.files[0];
@@ -852,7 +843,8 @@
                         const controller = new AbortController();
                         const timeoutId = setTimeout(() => controller.abort(), 10000); 
 
-                        let res = await fetch(`https://api.cosmos.bluesoft.com.br/gtins/${ean}.json`, { 
+                        // NOVO: Chama a URL do Proxy Cloudflare
+                        let res = await fetch(`${URL_DO_PROXY}/${ean}`, { 
                             headers: { 'X-Cosmos-Token': API_TOKEN },
                             signal: controller.signal
                         });
@@ -902,9 +894,10 @@
                             
                             if (!isPausadoManual && !validacaoCancelada) {
                                 alternarPausa(); 
-                                let mensagemQueda = "A extensão 'Allow CORS' foi desativada ou a internet caiu.\n\n1. Verifique a conexão.\n2. Ative a extensão (C: ON).\n3. Clique abaixo para retomar.";
+                                // NOVA MENSAGEM: Sem mencionar extensões
+                                let mensagemQueda = "Sua conexão com a internet caiu ou houve uma falha de rede.\n\n1. Verifique sua conexão.\n2. Clique no botão abaixo para retomar de onde parou.";
                                 
-                                let retomar = await uiConfirmAsync("Conexão Interrompida ⚠️", mensagemQueda, "✅ Já ativei, retomar!");
+                                let retomar = await uiConfirmAsync("Conexão Interrompida ⚠️", mensagemQueda, "✅ Conexão ok, retomar!");
                                 
                                 if (retomar) {
                                     alternarPausa(); 

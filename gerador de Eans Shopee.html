@@ -111,6 +111,8 @@
 
         .btn-magico { background-color: #6366f1; color: white; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-weight: bold; height: 50px; margin-top: 25px; transition: 0.2s; white-space: nowrap; font-size: 13px;}
         .btn-magico:hover { background-color: #4f46e5; }
+        /* Adicionada visualização de bloqueio para o botão sincronizar quando validando */
+        .btn-magico:disabled { opacity: 0.5; cursor: not-allowed; background-color: #94a3b8; }
 
         .box-flash { display: flex; justify-content: flex-end; margin-bottom: 15px; }
         .label-flash { font-size: 12px; color: #92400e; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; background: #fef3c7; padding: 8px 15px; border-radius: 8px; border: 1px solid #fcd34d; transition: 0.2s; }
@@ -1048,7 +1050,12 @@
 
                 if (isModoOfflineRisk && validadosConcluidos >= total) break;
 
-                await new Promise(r => setTimeout(r, 800)); 
+                // CORREÇÃO AQUI: Se for OFFLINE (Sem validar), não espera 800ms. Ele aprova quase instantâneo!
+                if (!isModoOfflineRisk) {
+                    await new Promise(r => setTimeout(r, 800)); 
+                } else {
+                    await new Promise(r => setTimeout(r, 10)); // Respira super rápido para não congelar o Google Chrome
+                }
             }
             
             if (validacaoCancelada) {

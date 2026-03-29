@@ -68,9 +68,12 @@
         .input-token { width: 100%; padding: 15px; border: 2px solid #cbd5e1; border-radius: 8px; font-size: 15px; font-family: monospace; margin-bottom: 15px; box-sizing: border-box; outline: none; transition: 0.3s;}
         .input-token:focus { border-color: var(--shopee-laranja); box-shadow: 0 0 0 3px rgba(238, 77, 45, 0.1); }
 
-        .painel-memoria { background: #eef2ff; border-left: 5px solid #6366f1; padding: 15px 20px; border-radius: 8px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;}
-        .memoria-texto { font-size: 13px; color: #312e81; }
-        .memoria-destaque { font-family: monospace; font-size: 16px; font-weight: bold; background: white; padding: 4px 10px; border-radius: 6px; border: 1px solid #c7d2fe; margin-left: 10px;}
+        .painel-memoria { background: #eef2ff; border-left: 5px solid #6366f1; padding: 15px 20px; border-radius: 8px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;}
+        .seletor-loja { flex: 1; min-width: 250px; display: flex; align-items: center; gap: 10px; }
+        .seletor-loja select { flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid #c7d2fe; outline: none; font-size: 14px; background: white; color: #312e81; font-weight: bold; cursor: pointer;}
+        .memoria-detalhes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;}
+        .memoria-texto { font-size: 13px; color: #312e81; white-space: nowrap;}
+        .memoria-destaque { font-family: monospace; font-size: 16px; font-weight: bold; background: white; padding: 4px 10px; border-radius: 6px; border: 1px solid #c7d2fe; white-space: nowrap;}
 
         .painel-importacao { background-color: #f8fafc; border: 2px dashed #cbd5e1; padding: 25px; border-radius: 12px; margin-bottom: 25px; text-align: center; transition: 0.3s; }
         .instrucao-import { font-size: 13px; color: #475569; margin-top: 5px; margin-bottom: 15px; background: #fff; display: inline-block; padding: 10px 15px; border-radius: 6px; border: 1px solid #e2e8f0;}
@@ -104,6 +107,7 @@
         .grupo-input input:focus { border-color: var(--shopee-laranja); }
         .grupo-input input:disabled { background-color: #f1f5f9; color: #94a3b8; }
         .dica-input { font-size: 11px; color: #64748b; margin-top: 6px; line-height: 1.4;}
+        .aviso-gs1 { font-size: 11px; font-weight: 600; margin-top: 4px; display: none; }
 
         .btn-magico { background-color: #6366f1; color: white; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-weight: bold; height: 50px; margin-top: 25px; transition: 0.2s; white-space: nowrap; font-size: 13px;}
         .btn-magico:hover { background-color: #4f46e5; }
@@ -223,11 +227,18 @@
         </div>
 
         <div class="painel-memoria">
-            <div style="display: flex; align-items: center;">
-                <div class="memoria-texto"><b>Memória Interna:</b> Último EAN gerado e salvo pelo sistema:</div>
-                <div class="memoria-destaque" id="txtUltimoEan">Nenhum registro</div>
+            <div class="seletor-loja">
+                <div class="memoria-texto">🏢 <b>Loja Ativa:</b></div>
+                <select id="selectLoja" onchange="trocarLoja()">
+                    <option value="default">Loja Principal</option>
+                </select>
+                <button class="btn-top" onclick="criarNovaLoja()" style="padding: 6px 10px;" data-tooltip="Criar um novo perfil de loja com contador independente.">➕ Nova</button>
             </div>
-            <button class="btn-top btn-perigo" onclick="limparMemoriaInterna()" data-tooltip="Apaga o último EAN salvo para você começar uma nova sequência do zero, sem conflitos.">🗑️ Limpar Memória</button>
+            <div class="memoria-detalhes">
+                <div class="memoria-texto">Último EAN da Loja:</div>
+                <div class="memoria-destaque" id="txtUltimoEan">Nenhum registro</div>
+                <button class="btn-top btn-perigo" onclick="limparMemoriaInterna()" data-tooltip="Apaga o último EAN salvo para você começar uma nova sequência do zero, sem conflitos.">🗑️ Limpar</button>
+            </div>
         </div>
 
         <div class="painel-importacao" id="hl-importar">
@@ -278,13 +289,14 @@
                 <div class="grupo-input">
                     <label>Passo 2: Código Base (Prefixo):</label>
                     <input type="text" id="codigoBase" placeholder="Ex: 789000000000" maxlength="12" oninput="atualizarContador(true)" data-tooltip="Siga o padrão GS1 global.">
+                    <div class="aviso-gs1" id="avisoGS1"></div>
                     <div class="dica-input">
                         Padrão: <b>789</b>(País) + <b>CNPJ</b> + <b>0000</b>(Sequência)<br>
                         <i>Detectado automaticamente pela planilha ou memória.</i>
                     </div>
                 </div>
                 
-                <button class="btn-magico" onclick="puxarMemoria()" data-tooltip="Puxa o último EAN lá de cima e soma +1 para você continuar a sequência em outra planilha.">🔗 Sincronizar Base</button>
+                <button class="btn-magico" onclick="puxarMemoria()" data-tooltip="Puxa o último EAN da LOJA ATIVA lá de cima e soma +1 para você continuar a sequência em outra planilha.">🔗 Sincronizar Base</button>
                 
                 <div class="grupo-input" style="flex: 0.4;">
                     <label>Total a Gerar:</label>
@@ -303,7 +315,7 @@
             <div class="linha-botoes" id="hl-botoes">
                 <button class="btn-gerar" onclick="gerarTabela()" data-tooltip="Cria a lista de EANs calculados na tabela abaixo.">⚙️ 3. Gerar Lista</button>
                 <button class="btn-verificar" onclick="verificarNoBanco()" data-tooltip="Checa no banco Cosmos se os EANs estão 100% livres.">🔎 4. Validar Cosmos</button>
-                <button class="btn-exportar" onclick="exportarPlanilha()" data-tooltip="Injeta os EANs e baixa a planilha pronta para enviar pra Shopee.">📥 5. Salvar e Baixar</button>
+                <button class="btn-exportar" onclick="exportarPlanilha()" data-tooltip="Injeta os EANs, baixa a planilha e gera o Log de Auditoria.">📥 5. Salvar e Baixar</button>
             </div>
         </div>
 
@@ -328,6 +340,12 @@
         let API_TOKEN = ''; 
         let validacaoEmAndamento = false;
         let isPausadoManual = false; 
+
+        // NOVO: Cofre de Lojas
+        let bancoLojas = {
+            'default': { nome: 'Loja Principal', ultimoEan: null, base12: null }
+        };
+        let lojaAtivaId = 'default';
 
         function uiAlert(title, message, isConfirm = false, confirmCallback = null) {
             document.getElementById('modalTitle').innerText = title;
@@ -384,7 +402,7 @@
             } else {
                 API_TOKEN = tokenSalvo; 
                 mostrarTela('tela-app'); 
-                carregarMemoria();
+                carregarCofreLojas();
                 if (!localStorage.getItem('tutorial_final_concluido')) {
                     setTimeout(() => iniciarTutorial(false), 500);
                 }
@@ -444,36 +462,123 @@
         let baseAutoDetectada = "";
         let fonteBaseAtual = "manual"; 
 
-        function carregarMemoria() {
-            const mem = JSON.parse(localStorage.getItem('ean_memoria_interna'));
-            if (mem && mem.ean) document.getElementById('txtUltimoEan').innerText = mem.ean;
+        // NOVO: Funções do Cofre de Lojas
+        function carregarCofreLojas() {
+            const salvo = localStorage.getItem('ean_master_lojas');
+            if (salvo) {
+                bancoLojas = JSON.parse(salvo);
+            } else {
+                // Tenta migrar a memória antiga, se existir
+                const memAntiga = JSON.parse(localStorage.getItem('ean_memoria_interna'));
+                if (memAntiga) {
+                    bancoLojas['default'].ultimoEan = memAntiga.ean;
+                    bancoLojas['default'].base12 = memAntiga.base12;
+                    localStorage.removeItem('ean_memoria_interna');
+                }
+                salvarCofreLojas();
+            }
+            
+            lojaAtivaId = localStorage.getItem('ean_master_loja_ativa') || 'default';
+            if (!bancoLojas[lojaAtivaId]) lojaAtivaId = 'default';
+
+            atualizarSelectLojas();
+            atualizarUI_Memoria();
+        }
+
+        function salvarCofreLojas() {
+            localStorage.setItem('ean_master_lojas', JSON.stringify(bancoLojas));
+            localStorage.setItem('ean_master_loja_ativa', lojaAtivaId);
+        }
+
+        function atualizarSelectLojas() {
+            const select = document.getElementById('selectLoja');
+            select.innerHTML = '';
+            for (let id in bancoLojas) {
+                let opt = document.createElement('option');
+                opt.value = id;
+                opt.innerText = bancoLojas[id].nome;
+                if (id === lojaAtivaId) opt.selected = true;
+                select.appendChild(opt);
+            }
+        }
+
+        function trocarLoja() {
+            lojaAtivaId = document.getElementById('selectLoja').value;
+            salvarCofreLojas();
+            atualizarUI_Memoria();
+            document.getElementById('codigoBase').value = ""; // Limpa a base ao trocar de loja para evitar mistura
+            fonteBaseAtual = "manual";
+            validarPrefixoGS1();
+            uiAlert("Loja Alterada", `Você agora está gerenciando: <b>${bancoLojas[lojaAtivaId].nome}</b>`);
+        }
+
+        function criarNovaLoja() {
+            const nome = prompt("Digite um nome para a nova Loja ou Perfil:");
+            if (nome && nome.trim() !== "") {
+                const id = 'loja_' + Date.now();
+                bancoLojas[id] = { nome: nome.trim(), ultimoEan: null, base12: null };
+                lojaAtivaId = id;
+                salvarCofreLojas();
+                atualizarSelectLojas();
+                atualizarUI_Memoria();
+            }
+        }
+
+        function atualizarUI_Memoria() {
+            const loja = bancoLojas[lojaAtivaId];
+            document.getElementById('txtUltimoEan').innerText = loja.ultimoEan ? loja.ultimoEan : "Nenhum registro";
         }
 
         function puxarMemoria(silencioso = false) {
-            const mem = JSON.parse(localStorage.getItem('ean_memoria_interna'));
-            if (mem && mem.base12) {
-                document.getElementById('codigoBase').value = (BigInt(mem.base12) + 1n).toString().padStart(12, '0');
+            const loja = bancoLojas[lojaAtivaId];
+            if (loja && loja.base12) {
+                document.getElementById('codigoBase').value = (BigInt(loja.base12) + 1n).toString().padStart(12, '0');
                 fonteBaseAtual = "memoria";
-                if(!silencioso) uiAlert("Base Sincronizada", "A base foi atualizada a partir do último registro salvo!");
+                validarPrefixoGS1();
+                if(!silencioso) uiAlert("Base Sincronizada", `A base da loja <b>${loja.nome}</b> foi sincronizada com sucesso!`);
             } else if (!silencioso) {
-                uiAlert("Sem Histórico", "Nenhum histórico salvo. Digite a base manualmente.");
+                uiAlert("Sem Histórico", `A loja <b>${loja.nome}</b> ainda não possui histórico salvo. Digite a base manualmente.`);
             }
         }
 
         function limparMemoriaInterna() {
-            uiAlert("Limpar Memória", "Tem certeza que deseja apagar a memória do último EAN gerado?\nUse isso apenas se quiser recomeçar uma loja nova do zero, sem vínculo com a sequência anterior.", true, () => {
-                localStorage.removeItem('ean_memoria_interna');
-                document.getElementById('txtUltimoEan').innerText = "Nenhum registro";
+            uiAlert("Limpar Memória da Loja", `Tem certeza que deseja apagar o contador da loja <b>${bancoLojas[lojaAtivaId].nome}</b>?\nUse isso apenas se quiser recomeçar a sequência desta loja do zero.`, true, () => {
+                bancoLojas[lojaAtivaId].ultimoEan = null;
+                bancoLojas[lojaAtivaId].base12 = null;
+                salvarCofreLojas();
+                atualizarUI_Memoria();
                 document.getElementById('codigoBase').value = "";
                 fonteBaseAtual = "manual";
-                uiAlert("Pronto", "Memória limpa com sucesso!");
+                validarPrefixoGS1();
+                uiAlert("Pronto", "Memória da loja limpa com sucesso!");
             });
+        }
+
+        // NOVO: Validação Visual GS1
+        function validarPrefixoGS1() {
+            const input = document.getElementById('codigoBase');
+            const aviso = document.getElementById('avisoGS1');
+            const val = input.value.replace(/\D/g, '');
+            
+            if (val.length >= 3) {
+                aviso.style.display = "block";
+                if (!val.startsWith('789') && !val.startsWith('790')) {
+                    aviso.innerHTML = "⚠️ Atenção: Padrão GS1 Brasil costuma iniciar com 789 ou 790.";
+                    aviso.style.color = "#d97706"; // Laranja alerta
+                } else {
+                    aviso.innerHTML = "✅ Prefixo padrão Brasil detectado.";
+                    aviso.style.color = "#059669"; // Verde sucesso
+                }
+            } else {
+                aviso.style.display = "none";
+            }
         }
 
         function atualizarContador(isManual = false) {
             let input = document.getElementById('codigoBase');
             input.value = input.value.replace(/\D/g, ''); 
             if(isManual) fonteBaseAtual = 'manual';
+            validarPrefixoGS1();
         }
 
         function mudouModoAcao() {
@@ -485,12 +590,14 @@
                 if (fonteBaseAtual === 'auto') {
                     inputBase.value = "";
                     fonteBaseAtual = "manual";
+                    validarPrefixoGS1();
                     uiAlert("Mudança de Estratégia", "Como você escolheu 'Substituir Tudo', a base detectada da planilha foi limpa para evitar a geração de EANs repetidos.\n\nPor favor, digite uma nova base ou clique em 'Sincronizar Base'.");
                 }
             } else {
                 if (inputBase.value === "" && baseAutoDetectada !== "") {
                     inputBase.value = baseAutoDetectada;
                     fonteBaseAtual = "auto";
+                    validarPrefixoGS1();
                 }
             }
         }
@@ -503,7 +610,7 @@
         let shopeeVarIdCol = 3;
         let todosProdutos = []; 
         let filaDeInjecao = []; 
-        let setEansExistentesGlobal = new Set(); // NOVO: Variável global para checagem rápida
+        let setEansExistentesGlobal = new Set();
 
         async function lerPlanilha(event) {
             const file = event.target.files[0];
@@ -535,7 +642,7 @@
                 }
 
                 todosProdutos = [];
-                setEansExistentesGlobal = new Set(); // Limpa e prepara o set global
+                setEansExistentesGlobal = new Set(); 
                 let stats = { total: 0, ok: 0, vazios: 0, duplicados: 0 };
                 let maxBaseDetectada = 0n;
 
@@ -587,6 +694,7 @@
                     baseAutoDetectada = "";
                     puxarMemoria(true);
                 }
+                validarPrefixoGS1();
 
                 calcularFila(); 
 
@@ -638,14 +746,12 @@
                 let eanValido = false;
                 let b12, ean;
                 
-                // NOVO: Pular EANs da própria planilha
                 while (!eanValido) {
                     b12 = seq.toString().padStart(12, '0');
                     ean = b12 + calcularDigitoVerificador(b12);
                     
-                    // Verifica se o EAN já existe noutro campo da mesma folha de cálculo
                     if (setEansExistentesGlobal.has(ean)) {
-                        seq++; // Se existir, pula imediatamente para o próximo!
+                        seq++; 
                     } else {
                         eanValido = true;
                     }
@@ -665,13 +771,14 @@
                     </td>
                 `;
                 fragment.appendChild(tr);
-                seq++; // Prepara a sequência para o próximo item do loop
+                seq++; 
             });
             tbody.appendChild(fragment);
         }
 
         function travarInterface(travado) {
             document.querySelectorAll('.painel-controles input, .painel-controles button').forEach(el => el.disabled = travado);
+            document.getElementById('selectLoja').disabled = travado;
         }
 
         function alternarPausa() {
@@ -715,7 +822,7 @@
 
             for (let i = 0; i < total; i++) {
                 let linha = linhas[i];
-                let ean = filaDeInjecao[i].eanGerado; // NOVO: Lemos da Memória Central
+                let ean = filaDeInjecao[i].eanGerado; 
                 let celulaStatus = linha.querySelector('td:nth-child(3)');
 
                 while (isPausadoManual) {
@@ -768,19 +875,17 @@
                         clearTimeout(timeoutId);
 
                         if (res.status === 200) { 
-                            // NOVO: A Mágica da Auto-Correção!
                             let base12Ativa = BigInt(ean.substring(0, 12));
-                            base12Ativa++; // Incrementa +1 ao EAN que falhou
+                            base12Ativa++; 
                             
                             let novoB12 = base12Ativa.toString().padStart(12, '0');
-                            ean = novoB12 + calcularDigitoVerificador(novoB12); // Atualiza a variável local
+                            ean = novoB12 + calcularDigitoVerificador(novoB12); 
                             
-                            filaDeInjecao[i].eanGerado = ean; // Guarda a alteração na memória central
-                            linha.querySelector('.codigo-ean').innerText = ean; // Mostra ao utilizador a mudança
+                            filaDeInjecao[i].eanGerado = ean; 
+                            linha.querySelector('.codigo-ean').innerText = ean; 
                             celulaStatus.innerHTML = `<span class="badge badge-buscando">🔄 Recalculando...</span>`;
                             
-                            await new Promise(r => setTimeout(r, 600)); // Pequena pausa para proteger o Cosmos
-                            // Nota: Não colocamos 'processado = true'. O loop while vai testar o novo EAN!
+                            await new Promise(r => setTimeout(r, 600)); 
                         } 
                         else if (res.status === 404) { 
                             filaDeInjecao[i].statusValidacao = 'aprovado';
@@ -843,6 +948,7 @@
             if(!originalWorkbook || filaDeInjecao.length === 0) return;
 
             let eansValidados = [];
+            let logConteudo = "ID_Produto\tID_Variante\tEAN_Atribuido\n"; // NOVO: Cabeçalho do Log de Auditoria
             let possuiErro = false;
 
             filaDeInjecao.forEach(item => {
@@ -853,15 +959,20 @@
                     eansValidados.push(item.eanGerado);
                     // Injeta na planilha direto da memória
                     originalWorksheet.getCell(item.rowNum, shopeeGtinColNumber).value = String(item.eanGerado);
+                    // Alimenta o Log
+                    logConteudo += `${item.idProd}\t${item.idVar}\t${item.eanGerado}\n`;
                 }
             });
 
             if (possuiErro) return uiAlert("Atenção", "Códigos 'Em Uso' foram encontrados.\nPor favor, altere o Código Base e gere novamente.");
             if (eansValidados.length < filaDeInjecao.length) return uiAlert("Atenção", "Você precisa validar a lista completa antes de baixar o arquivo.");
 
+            // NOVO: Atualiza o Cofre da Loja Ativa em vez da memória geral
             const ultimoEan = eansValidados[eansValidados.length - 1];
-            localStorage.setItem('ean_memoria_interna', JSON.stringify({ ean: ultimoEan, base12: ultimoEan.substring(0, 12) }));
-            carregarMemoria(); 
+            bancoLojas[lojaAtivaId].ultimoEan = ultimoEan;
+            bancoLojas[lojaAtivaId].base12 = ultimoEan.substring(0, 12);
+            salvarCofreLojas();
+            atualizarUI_Memoria(); 
 
             let prefixo = "";
             let modo = document.querySelector('input[name="modo_acao"]:checked').value;
@@ -871,6 +982,16 @@
 
             let nomeFinal = prefixo + originalFileName;
 
+            // NOVO: Baixa o Recibo (Log TXT)
+            const blobLog = new Blob([logConteudo], { type: 'text/plain' });
+            const linkLog = document.createElement("a");
+            linkLog.href = URL.createObjectURL(blobLog);
+            linkLog.download = `LOG_${nomeFinal.replace('.xlsx', '.txt')}`;
+            document.body.appendChild(linkLog);
+            linkLog.click();
+            document.body.removeChild(linkLog);
+
+            // Baixa o Excel
             const buffer = await originalWorkbook.xlsx.writeBuffer();
             const link = document.createElement("a");
             link.href = URL.createObjectURL(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
@@ -879,7 +1000,7 @@
             link.click();
             document.body.removeChild(link);
 
-            uiAlert("🎉 PLANILHA SALVA!", `Arquivo gerado com sucesso: <b>${nomeFinal}</b>\n\nCOMO ENVIAR PARA A SHOPEE:\n1. Acesse <b>Ações em Massa > Editar em Massa</b>.\n2. Clique na aba <b>'Envio'</b>.\n3. Clique em 'Selecionar Arquivo', envie a planilha gerada e aguarde a conclusão!`);
+            uiAlert("🎉 ARQUIVOS SALVOS!", `A planilha e o Log de Auditoria foram baixados!\n\nCOMO ENVIAR PARA A SHOPEE:\n1. Acesse <b>Ações em Massa > Editar em Massa</b>.\n2. Clique na aba <b>'Envio'</b>.\n3. Envie a planilha gerada e aguarde a conclusão!`);
         }
     </script>
 </body>

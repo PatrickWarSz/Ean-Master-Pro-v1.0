@@ -1,2 +1,2 @@
-# Ean-Master-Pro-v1.0
+# Ean_Master
 Gerador de Ean em massa com consulta em banco de dados bluesoft cosmos

@@ -85,12 +85,43 @@
         </div>
 
         <div class="painel-importacao" id="hl-importar">
-            <label style="color: #047857; font-weight: bold; font-size: 16px;">Passo 1: Importe o arquivo (.xlsx)</label><br>
-            <div class="instrucao-import">
-                🛒 <b>Download:</b> Produtos > Ações em massa > Editar em massa > <b>Informação de Venda</b> > Gerar
-            </div><br>
-            <label for="fileUpload" class="upload-btn" data-tooltip="Importe a planilha baixada na etapa acima.">📁 Selecionar Arquivo</label>
-            <input type="file" id="fileUpload" accept=".xlsx, .xls" onchange="lerPlanilha(event)">
+            <label style="color: #047857; font-weight: bold; font-size: 16px;">Passo 1: Escolha a plataforma e importe</label><br>
+            
+            <div style="margin: 15px 0; display: flex; gap: 15px; justify-content: center;">
+                <label style="cursor: pointer; padding: 10px 20px; border: 2px solid var(--shopee-laranja); border-radius: 8px; font-weight: bold; background: white; color: var(--shopee-laranja); transition: 0.2s;">
+                    <input type="radio" name="plataforma" value="shopee" checked onchange="mudarPlataforma()" style="display:none;"> 🟠 Shopee
+                </label>
+                <label style="cursor: pointer; padding: 10px 20px; border: 2px solid #2d3277; border-radius: 8px; font-weight: bold; background: white; color: #2d3277; transition: 0.2s;">
+                    <input type="radio" name="plataforma" value="mercadolivre" onchange="mudarPlataforma()" style="display:none;"> 🟡 Mercado Livre
+                </label>
+            </div>
+
+            <div id="uploadShopee">
+                <div class="instrucao-import">
+                    🛒 <b>Download:</b> Produtos > Ações em massa > Editar em massa > <b>Informação de Venda</b> > Gerar
+                </div><br>
+                <label for="fileUpload" class="upload-btn" data-tooltip="Importe a planilha baixada na etapa acima.">📁 Selecionar Planilha</label>
+                <input type="file" id="fileUpload" accept=".xlsx, .xls" onchange="lerPlanilha(event)">
+            </div>
+
+            <div id="uploadML" style="display: none;">
+                <div class="instrucao-import" style="border-color: #ffe600; border-width: 2px;">
+                    🛒 <b>Atenção:</b> O Mercado Livre exige a importação de <b>DUAS</b> planilhas em simultâneo.
+                </div><br>
+                <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
+                    <div style="background: #fff; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; width: 200px;">
+                        <label for="fileUploadMLFicha" class="upload-btn" style="background-color: #2d3277; width: 100%; box-sizing: border-box; padding: 10px;">📄 1. Ficha Técnica</label>
+                        <input type="file" id="fileUploadMLFicha" accept=".xlsx, .xls" onchange="lerPlanilhaML('ficha', event)">
+                        <div id="statusFichaML" style="font-size: 12px; margin-top: 10px; color: #ef4444; font-weight: bold;">❌ Pendente</div>
+                    </div>
+                    <div style="background: #fff; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; width: 200px;">
+                        <label for="fileUploadMLFiscais" class="upload-btn" style="background-color: #2d3277; width: 100%; box-sizing: border-box; padding: 10px;">📊 2. Dados Fiscais</label>
+                        <input type="file" id="fileUploadMLFiscais" accept=".xlsx, .xls" onchange="lerPlanilhaML('fiscais', event)">
+                        <div id="statusFiscaisML" style="font-size: 12px; margin-top: 10px; color: #ef4444; font-weight: bold;">❌ Pendente</div>
+                    </div>
+                </div>
+                <button id="btnProcessarML" class="upload-btn" style="background-color: #10b981; margin-top: 20px; display: none;" onclick="processarPlanilhasML()">🚀 Ler Planilhas Juntas</button>
+            </div>
             
             <div class="dashboard-resumo" id="dashResumo">
                 <div class="card-resumo total">

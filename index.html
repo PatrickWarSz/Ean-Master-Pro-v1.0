@@ -87,18 +87,24 @@
         <div class="painel-importacao" id="hl-importar">
             <label style="color: #047857; font-weight: bold; font-size: 16px;">Passo 1: Escolha a plataforma e importe</label><br>
             
-            <div style="margin: 15px 0; display: flex; gap: 15px; justify-content: center;">
-                <label style="cursor: pointer; padding: 10px 20px; border: 2px solid var(--shopee-laranja); border-radius: 8px; font-weight: bold; background: white; color: var(--shopee-laranja); transition: 0.2s;">
+            <div style="margin: 15px 0; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                <label style="cursor: pointer; padding: 10px 15px; border: 2px solid var(--shopee-laranja); border-radius: 8px; font-weight: bold; background: white; color: var(--shopee-laranja); transition: 0.2s;">
                     <input type="radio" name="plataforma" value="shopee" checked onchange="mudarPlataforma()" style="display:none;"> 🟠 Shopee
                 </label>
-                <label style="cursor: pointer; padding: 10px 20px; border: 2px solid #2d3277; border-radius: 8px; font-weight: bold; background: white; color: #2d3277; transition: 0.2s;">
+                <label style="cursor: pointer; padding: 10px 15px; border: 2px solid #2d3277; border-radius: 8px; font-weight: bold; background: white; color: #2d3277; transition: 0.2s;">
                     <input type="radio" name="plataforma" value="mercadolivre" onchange="mudarPlataforma()" style="display:none;"> 🟡 Mercado Livre
+                </label>
+                <label style="cursor: pointer; padding: 10px 15px; border: 2px solid #000000; border-radius: 8px; font-weight: bold; background: white; color: #000000; transition: 0.2s;">
+                    <input type="radio" name="plataforma" value="tiktok" onchange="mudarPlataforma()" style="display:none;"> ⚫ TikTok
+                </label>
+                <label style="cursor: pointer; padding: 10px 15px; border: 2px solid #0f766e; border-radius: 8px; font-weight: bold; background: white; color: #0f766e; transition: 0.2s;">
+                    <input type="radio" name="plataforma" value="shein" onchange="mudarPlataforma()" style="display:none;"> 🟢 Shein
                 </label>
             </div>
 
-            <div id="uploadShopee">
-                <div class="instrucao-import">
-                    🛒 <b>Download:</b> Produtos > Ações em massa > Editar em massa > <b>Informação de Venda</b> > Gerar
+            <div id="uploadUnico">
+                <div class="instrucao-import" id="instrucaoUnica">
+                    🛒 <b>Shopee:</b> Produtos > Ações em massa > Editar em massa > Informação de Venda
                 </div><br>
                 <label for="fileUpload" class="upload-btn" data-tooltip="Importe a planilha baixada na etapa acima.">📁 Selecionar Planilha</label>
                 <input type="file" id="fileUpload" accept=".xlsx, .xls" onchange="lerPlanilha(event)">

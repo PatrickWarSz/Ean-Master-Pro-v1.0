@@ -308,10 +308,35 @@ function validarPrefixoGS1() {
         aviso.style.display = "block";
         const loja = bancoLojas[lojaAtivaId];
         
+        // 1. Se a base já transbordou o limite do perfil
         if (loja.prefixoLoja && !val.startsWith(loja.prefixoLoja)) {
-            aviso.innerHTML = `⚠️ Atenção: A base difere do prefixo original cadastrado para a loja (${loja.prefixoLoja}).`;
-            aviso.style.color = "#d97706"; 
-        } else if (!val.startsWith('789') && !val.startsWith('790')) {
+            aviso.innerHTML = `🚨 LIMITE ULTRAPASSADO: O contador estourou e o prefixo original (${loja.prefixoLoja}) mudou.`;
+            aviso.style.color = "#dc2626"; // Vermelho
+        } 
+        // 2. Se a base está certa, calcula quantos códigos faltam para bater o teto
+        else if (val.length === 12 && loja.prefixoLoja && val.startsWith(loja.prefixoLoja)) {
+            const prefixoLength = loja.prefixoLoja.length;
+            
+            // Só faz o cálculo de sobra se o prefixo da loja for menor que 12 dígitos
+            if (prefixoLength < 12) {
+                const sequenciaAtual = parseInt(val.substring(prefixoLength));
+                const limiteLote = Math.pow(10, 12 - prefixoLength);
+                const faltam = limiteLote - sequenciaAtual;
+
+                if (faltam <= 300) { 
+                    aviso.innerHTML = `⚠️ ALERTA DE LOTE: Restam apenas <b>${faltam} códigos</b> antes do limite de ${limiteLote.toLocaleString('pt-BR')} ser atingido!`;
+                    aviso.style.color = "#ea580c"; // Laranja forte
+                } else {
+                    aviso.innerHTML = `✅ Prefixo da loja reconhecido. (Livre: <b>${faltam}</b> códigos)`;
+                    aviso.style.color = "#059669"; // Verde
+                }
+            } else {
+                aviso.innerHTML = `✅ Prefixo de 12 dígitos reconhecido.`;
+                aviso.style.color = "#059669";
+            }
+        } 
+        // 3. Validação comum GS1
+        else if (!val.startsWith('789') && !val.startsWith('790')) {
             aviso.innerHTML = "⚠️ Atenção: Padrão GS1 Brasil costuma iniciar com 789 ou 790.";
             aviso.style.color = "#d97706"; 
         } else {

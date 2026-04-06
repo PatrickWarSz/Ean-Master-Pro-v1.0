@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EAN Master Pro - Gestão Multiplataforma</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+</head>
+<body onload="inicializarSistema()">
+
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-box" id="customModal">
+            <h3 class="modal-title" id="modalTitle">Mensagem</h3>
+            <p class="modal-message" id="modalMessage">Texto da mensagem aqui.</p>
+            <div class="modal-actions">
+                <button class="modal-btn modal-btn-cancel" id="modalBtnCancel">Cancelar</button>
+                <button class="modal-btn modal-btn-ok" id="modalBtnOk">OK, Entendi</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="tourOverlay"></div>
+    <div id="tourBox">
+        <h3 id="tourTitle">Bem-vindo!</h3>
+        <p id="tourText">Texto do tutorial aqui.</p>
+        <button class="tour-btn" onclick="proximoPassoTutorial()">Entendi, próximo</button>
+    </div>
+
+    <div id="tela-login" class="tela container" style="max-width: 400px; margin-top: 50px;">
+        <div class="header" style="border:none; text-align: center; justify-content: center;">
+            <h2 style="color: var(--shopee-laranja); font-size: 28px;">EAN MASTER PRO</h2>
+            <p>Faça login para acessar o sistema</p>
+        </div>
+        <div class="grupo-input" style="margin-bottom: 15px;">
+            <label>E-mail:</label>
+            <input type="email" id="emailLogin" placeholder="seu@email.com">
+        </div>
+        <div class="grupo-input" style="margin-bottom: 25px;">
+            <label>Senha:</label>
+            <input type="password" id="senhaLogin" placeholder="******">
+        </div>
+        <button class="btn-primario" style="width: 100%; margin-bottom: 15px;" onclick="fazerLogin()">Entrar no Sistema 🚀</button>
+        <p style="text-align: center; font-size: 12px; color: #64748b;">Gestão de cadastro em massa de EAN</p>
+    </div>
+
+    <div id="tela-setup" class="tela container">
+        <div class="header" style="border:none; padding-bottom: 10px;">
+            <div class="header-text" style="text-align: center;">
+                <h2>EAN MASTER PRO</h2>
+                <p>Configuração de Primeiro Acesso</p>
+            </div>
+        </div>
+
+        <div class="setup-passo">
+            <h3>📄 Passo 0: Onde baixar a sua Planilha Base</h3>
+            <p>Exporte a planilha de produtos da plataforma que deseja atualizar:</p>
+            <ol class="lista-instrucoes">
+                <li>🛒 <b>Shopee:</b> Produtos > Ações em massa > Editar em massa > Informação de Venda</li>
+                <li>🟡 <b>Mercado Livre:</b> Anúncios > Modificar em massa > Ficha Técnica / Dados Fiscais</li>
+                <li>⚫ <b>TikTok Shop:</b> Produtos > Gerenciar produtos > Ações em massa > Editar produtos em massa > Todas as informações</li>
+            </ol>
+        </div>
+
+        <div class="setup-passo">
+            <h3>🔑 Passo 1: Chave do Cosmos (API)</h3>
+            <p>Insira seu token para validar os códigos no banco de dados GS1.</p>
+            <input type="text" id="inputToken" class="input-token" placeholder="Cole sua Chave/Token aqui...">
+            <div style="text-align: right;">
+                <button class="btn-primario" onclick="salvarSetup()">Concluir e Acessar 🚀</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="tela-app" class="tela container">
+        <div class="header">
+            <div class="header-text">
+                <h2>EAN MASTER PRO</h2>
+                <p>Gestão Multiplataforma de geração e cadastro em massa de Ean</p>
+            </div>
+            <div class="top-actions">
+                <button class="btn-top" onclick="iniciarTutorial(true)">💡 Tutorial</button>
+                <button class="btn-top" onclick="reconfigurarSistema()">⚙️ API</button>
+                <button class="btn-top" onclick="logout()" style="color: #ef4444;">🚪 Sair</button>
+            </div>
+        </div>
+
+        <div class="painel-memoria">
+            <div class="seletor-loja">
+                <div class="memoria-texto">🏢 <b>Loja Ativa:</b></div>
+                <select id="selectLoja" onchange="trocarLoja(false)"></select>
+                <button class="btn-top" onclick="editarLoja()">✏️</button>
+                <button class="btn-top" onclick="excluirLoja()">🗑️</button>
+                <button class="btn-top" onclick="criarNovaLoja()" style="padding: 6px 10px;">➕ Nova</button>
+            </div>
+            <div class="memoria-detalhes">
+                <div class="memoria-texto">Último EAN da Loja:</div>
+                <div class="memoria-destaque" id="txtUltimoEan">Nenhum registro</div>
+                <button class="btn-top btn-perigo" onclick="limparMemoriaInterna()">🗑️ Limpar</button>
+            </div>
+        </div>
+
+        <div class="painel-importacao" id="hl-importar">
+            <label style="color: #047857; font-weight: bold; font-size: 16px;">Passo 1: Escolha a plataforma e importe</label><br>
+            
+            <div style="margin: 15px 0; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                <label style="cursor: pointer; padding: 10px 15px; border: 2px solid var(--shopee-laranja); border-radius: 8px; font-weight: bold; background: white; color: var(--shopee-laranja);">
+                    <input type="radio" name="plataforma" value="shopee" checked onchange="mudarPlataforma()" style="display:none;"> 🟠 Shopee
+                </label>
+                <label style="cursor: pointer; padding: 10px 15px; border: 2px solid #2d3277; border-radius: 8px; font-weight: bold; background: white; color: #2d3277;">
+                    <input type="radio" name="plataforma" value="mercadolivre" onchange="mudarPlataforma()" style="display:none;"> 🟡 Mercado Livre
+                </label>
+                <label style="cursor: pointer; padding: 10px 15px; border: 2px solid #000000; border-radius: 8px; font-weight: bold; background: white; color: #000000;">
+                    <input type="radio" name="plataforma" value="tiktok" onchange="mudarPlataforma()" style="display:none;"> ⚫ TikTok
+                </label>
+            </div>
+
+            <div id="uploadUnico">
+                <div class="instrucao-import" id="instrucaoUnica">
+                    🛒 <b>Shopee:</b> Produtos > Ações em massa > Editar em massa > Informação de Venda
+                </div><br>
+                <label for="fileUpload" class="upload-btn">📁 Selecionar Planilha</label>
+                <input type="file" id="fileUpload" accept=".xlsx, .xls" onchange="lerPlanilha(event)">
+            </div>
+
+            <div id="uploadML" style="display: none;">
+                <div class="instrucao-import" style="border-color: #ffe600; border-width: 2px;">
+                    🛒 <b>Atenção:</b> O Mercado Livre exige a importação de <b>DUAS</b> planilhas em simultâneo.
+                </div><br>
+                <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
+                    <div style="background: #fff; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; width: 200px;">
+                        <label for="fileUploadMLFicha" class="upload-btn" style="background-color: #2d3277; width: 100%; box-sizing: border-box; padding: 10px;">📄 1. Ficha Técnica</label>
+                        <input type="file" id="fileUploadMLFicha" accept=".xlsx, .xls" onchange="lerPlanilhaML('ficha', event)">
+                        <div id="statusFichaML" style="font-size: 12px; margin-top: 10px; color: #ef4444; font-weight: bold;">❌ Pendente</div>
+                    </div>
+                    <div style="background: #fff; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; width: 200px;">
+                        <label for="fileUploadMLFiscais" class="upload-btn" style="background-color: #2d3277; width: 100%; box-sizing: border-box; padding: 10px;">📊 2. Dados Fiscais</label>
+                        <input type="file" id="fileUploadMLFiscais" accept=".xlsx, .xls" onchange="lerPlanilhaML('fiscais', event)">
+                        <div id="statusFiscaisML" style="font-size: 12px; margin-top: 10px; color: #ef4444; font-weight: bold;">❌ Pendente</div>
+                    </div>
+                </div>
+                <button id="btnProcessarML" class="upload-btn" style="background-color: #10b981; margin-top: 20px; display: none;" onclick="processarPlanilhasML()">🚀 Ler Planilhas Juntas</button>
+            </div>
+            
+            <div class="dashboard-resumo" id="dashResumo" style="grid-template-columns: repeat(5, 1fr);">
+                <div class="card-resumo" style="border-left-color: #8b5cf6;">
+                    <div class="card-titulo">Produtos Únicos</div>
+                    <div class="card-valor" id="rxUnicos">0</div>
+                </div>
+                <div class="card-resumo total">
+                    <div class="card-titulo">Total Variações</div>
+                    <div class="card-valor" id="rxTotal">0</div>
+                </div>
+                <div class="card-resumo ok">
+                    <div class="card-titulo">Já possuem EAN</div>
+                    <div class="card-valor" id="rxOk">0</div>
+                </div>
+                <div class="card-resumo vazios">
+                    <div class="card-titulo">EANs Faltando</div>
+                    <div class="card-valor" id="rxVazios">0</div>
+                </div>
+                <div class="card-resumo duplicados">
+                    <div class="card-titulo">Repetidos (Erros)</div>
+                    <div class="card-valor" id="rxDuplicados" style="color: #ef4444;">0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="painel-controles" id="hl-acoes">
+            <div class="seletor-modo">
+                <div class="opcao-modo">
+                    <input type="radio" name="modo_acao" value="vazios" id="modoVazios" checked onchange="mudouModoAcao()">
+                    <label for="modoVazios">✨ Preencher apenas os Vazios</label>
+                </div>
+                <div class="opcao-modo">
+                    <input type="radio" name="modo_acao" value="erros" id="modoErros" onchange="mudouModoAcao()">
+                    <label for="modoErros">🛠️ Corrigir Repetidos + Vazios</label>
+                </div>
+                <div class="opcao-modo">
+                    <input type="radio" name="modo_acao" value="todos" id="modoTodos" onchange="mudouModoAcao()">
+                    <label for="modoTodos">🚜 Substituir Tudo</label>
+                </div>
+            </div>
+
+            <div class="linha-inputs" id="hl-base">
+                <div class="grupo-input">
+                    <label>Passo 2: Código Base (12 Dígitos):</label>
+                    <input type="text" id="codigoBase" placeholder="Ex: 789000000000" maxlength="12" oninput="atualizarContador(true)">
+                    <div class="aviso-gs1" id="avisoGS1"></div>
+                    <div class="dica-input">Padrão: <b>789</b> + <b>CNPJ</b> + <b>0000</b></div>
+                </div>
+                <button class="btn-magico" onclick="puxarMemoria()">🔗 Sincronizar Base</button>
+                <div class="grupo-input" style="flex: 0.4;">
+                    <label>Total a Gerar:</label>
+                    <input type="number" id="qtdGerar" value="0" disabled>
+                </div>
+            </div>
+            
+            <div class="box-flash">
+                <label class="label-flash">
+                    <input type="checkbox" id="checkOffline">
+                    ⚠️ Gerar sem validar no banco (Offline)
+                </label>
+            </div>
+
+            <div class="linha-botoes" id="hl-botoes">
+                <button class="btn-gerar" onclick="gerarTabela()">⚙️ 3. Gerar Lista</button>
+                <button class="btn-verificar" onclick="verificarNoBanco()">🔎 4. Validar Cosmos</button>
+                <button class="btn-exportar" onclick="exportarPlanilha()">📥 5. Salvar e Baixar</button>
+            </div>
+        </div>
+
+        <div class="status-container" id="statusContainer">
+            <div id="progresso">Validando: 0 de 0</div>
+            <div id="timer">⏱️ Calculando tempo...</div>
+            <div id="horaConclusao"></div>
+            <div class="btn-pausa-container">
+                <button id="btnPausar" class="btn-pausa" onclick="alternarPausa()" style="display:none;">⏸️ Pausar Validação</button>
+            </div>
+        </div>
+
+        <div class="tabela-container">
+            <table id="tabelaResultados">
+                <thead><tr><th class="col-num">Nº</th><th>EAN-13 Gerado</th><th>Status</th><th>Referência: ID Prod. / ID Var.</th></tr></thead>
+                <tbody id="corpoTabela"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -5,7 +5,7 @@ const URL_DO_PROXY = "https://proxyeanmaster.gsouzapatrick.workers.dev";
 let API_TOKEN = ''; 
 let validacaoEmAndamento = false;
 let isPausadoManual = false; 
-let plataformaAtual = 'shopee'; // Define a plataforma inicial
+let plataformaAtual = 'shopee'; 
 
 // Cofre de Lojas
 let bancoLojas = {
@@ -13,8 +13,50 @@ let bancoLojas = {
 };
 let lojaAtivaId = 'default';
 
-// Variável global para controlar a Fila de EANs
 let sequenciaGlobalAtual = 0n;
+
+// ====== NOVO: SISTEMA DE LOGIN (V2) ======
+function inicializarSistema() {
+    // Verifica se já existe uma sessão ativa nesta aba
+    const usuarioLogado = sessionStorage.getItem('ean_master_sessao');
+    
+    if (!usuarioLogado) {
+        mostrarTela('tela-login');
+    } else {
+        verificarTokenCosmos();
+    }
+}
+
+function fazerLogin() {
+    const email = document.getElementById('emailLogin').value;
+    const senha = document.getElementById('senhaLogin').value;
+    
+    if(email === "" || senha === "") return alert("Preencha e-mail e senha.");
+    
+    // Simulação de login - No futuro aqui conectamos ao banco de dados real
+    sessionStorage.setItem('ean_master_sessao', email);
+    verificarTokenCosmos();
+}
+
+function verificarTokenCosmos() {
+    const tokenSalvo = localStorage.getItem('ean_master_token');
+    if (!tokenSalvo) {
+        mostrarTela('tela-setup'); 
+    } else {
+        API_TOKEN = tokenSalvo; 
+        mostrarTela('tela-app'); 
+        carregarCofreLojas();
+        if (!localStorage.getItem('tutorial_final_concluido')) {
+            setTimeout(() => iniciarTutorial(false), 500);
+        }
+    }
+}
+
+function logout() {
+    sessionStorage.removeItem('ean_master_sessao');
+    location.reload();
+}
+// =========================================
 
 function uiAlert(title, message, isConfirm = false, confirmCallback = null) {
     document.getElementById('modalTitle').innerText = title;
@@ -64,25 +106,11 @@ function mostrarTela(idTela) {
     document.getElementById(idTela).classList.add('ativa');
 }
 
-function inicializarSistema() {
-    const tokenSalvo = localStorage.getItem('ean_master_token');
-    if (!tokenSalvo) {
-        mostrarTela('tela-setup'); 
-    } else {
-        API_TOKEN = tokenSalvo; 
-        mostrarTela('tela-app'); 
-        carregarCofreLojas();
-        if (!localStorage.getItem('tutorial_final_concluido')) {
-            setTimeout(() => iniciarTutorial(false), 500);
-        }
-    }
-}
-
 function salvarSetup() {
     const token = document.getElementById('inputToken').value.trim();
     if (token.length > 10) { 
         localStorage.setItem('ean_master_token', token);
-        inicializarSistema(); 
+        verificarTokenCosmos(); 
     } else {
         uiAlert("Chave Inválida", "Cole a chave correta da plataforma Cosmos.");
     }
@@ -166,6 +194,7 @@ function salvarCofreLojas() {
 
 function atualizarSelectLojas() {
     const select = document.getElementById('selectLoja');
+    if(!select) return;
     select.innerHTML = '';
     for (let id in bancoLojas) {
         let opt = document.createElement('option');
@@ -338,9 +367,8 @@ function mudouModoAcao() {
     }
 }
 
-// ================= INTELIGÊNCIA DE PLANILHAS (SHOPEE, TIKTOK, SHEIN, ML) =================
+// ================= INTELIGÊNCIA DE PLANILHAS (SHOPEE, TIKTOK, ML) =================
 
-// Variáveis Globais de Planilhas
 let originalWorkbook = null;
 let originalWorksheet = null;
 let originalFileName = "";
@@ -366,6 +394,7 @@ function limparWorkspace() {
     
     document.getElementById('dashResumo').style.display = 'none';
     document.getElementById('rxTotal').innerText = "0";
+    if(document.getElementById('rxUnicos')) document.getElementById('rxUnicos').innerText = "0";
     document.getElementById('rxOk').innerText = "0";
     document.getElementById('rxVazios').innerText = "0";
     document.getElementById('rxDuplicados').innerText = "0";
@@ -397,15 +426,12 @@ function mudarPlataforma() {
         if (plataformaAtual === 'shopee') {
             instrucaoUnica.innerHTML = "🛒 <b>Shopee:</b> Produtos > Ações em massa > Editar em massa > Informação de Venda";
         } else if (plataformaAtual === 'tiktok') {
-            instrucaoUnica.innerHTML = "⚫ <b>TikTok Shop:</b> Ferramenta em Lote > Editar todos os atributos";
-        } else if (plataformaAtual === 'shein') {
-            instrucaoUnica.innerHTML = "🟢 <b>Shein:</b> Produtos > Importação/Exportação em massa > Exportar Produtos";
+            instrucaoUnica.innerHTML = "⚫ <b>TikTok Shop:</b> Produtos > Gerenciar produtos > Ações em massa > Editar produtos em massa > Todas as informações";
         }
     }
 }
 
-// LER PLANILHA ÚNICA (SUPER RADAR para Shopee, TikTok, Shein)
-// LER PLANILHA ÚNICA (SUPER RADAR para Shopee, TikTok, Shein)
+// LER PLANILHA ÚNICA (V2 COM PRODUTOS ÚNICOS)
 async function lerPlanilha(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -423,7 +449,7 @@ async function lerPlanilha(event) {
             
             todosProdutos = [];
             setEansExistentesGlobal = new Set();
-            let stats = { total: 0, ok: 0, vazios: 0, duplicados: 0 };
+            let stats = { total: 0, ok: 0, vazios: 0, duplicados: 0, unicos: new Set() };
             let maxBaseDetectada = 0n;
             
             let colId = -1, colVarId = -1, colEan = -1, colGtinType = -1;
@@ -433,86 +459,59 @@ async function lerPlanilha(event) {
                 const row = originalWorksheet.getRow(r);
                 row.eachCell((cell, colNumber) => {
                     const val = cell.value ? String(cell.value).toLowerCase().trim() : '';
-                    
                     if (val === 'product id' || val === 'produto id' || val === 'et_title_product_id') colId = colNumber;
                     if (val === 'variation id' || val === 'variação id' || val === 'variante identificador' || val === 'et_title_variation_id') colVarId = colNumber;
                     if (val === 'ps_gtin_code' || val.includes('gtin (ean)') || val === 'gtin') colEan = colNumber;
-                    
                     if (val === 'id do produto' || val === 'product_id') colId = colNumber;
                     if (val === 'id do sku' || val === 'sku_id') colVarId = colNumber;
                     if (val === 'código identificador' || val === 'gtin_code') colEan = colNumber;
                     if (val === 'tipo de código identificador' || val === 'gtin_type') colGtinType = colNumber;
-                    
                     if (val === 'sku' || val === 'product_sku') { if (colId === -1) colId = colNumber; }
                     if (val === 'barcode' || val === 'ean' || val === 'upc') { if (colEan === -1) colEan = colNumber; }
                 });
-                if (colId !== -1 && colEan !== -1) {
-                    rowHeader = r;
-                    break;
-                }
+                if (colId !== -1 && colEan !== -1) { rowHeader = r; break; }
             }
             
-            if (colId === -1 || colEan === -1) {
-                return uiAlert("Erro de Leitura", "Não foi possível encontrar as colunas de ID ou EAN nesta planilha. Verifique se exportou o modelo correto.");
-            }
+            if (colId === -1 || colEan === -1) return uiAlert("Erro de Leitura", "Colunas de ID ou EAN não encontradas.");
             
-            // LISTA DE PALAVRAS QUE O ROBÔ DEVE IGNORAR (Para não ler o cabeçalho como produto)
-            const ignorarTextos = ['obrigatório', 'não editável', 'mandatory', 'v3', 'id do produto', 'product_id', 'product id', 'sku', 'product_sku'];
+           const ignorarTextos = ['obrigatório', 'não editável', 'mandatory', 'v3', 'id do produto', 'product_id', 'product id', 'sku', 'product_sku', 'sales_info'];
 
             originalWorksheet.eachRow((row, rowNumber) => {
                 if (rowNumber > rowHeader) {
                     let idVal = row.getCell(colId).value;
                     let varVal = colVarId !== -1 ? row.getCell(colVarId).value : '';
-                    
                     let idTexto = idVal ? String(idVal).trim().toLowerCase() : '';
                     
-                    // O Robô agora verifica se a palavra NÃO está na lista de ignorados
                     if (idTexto !== '' && !ignorarTextos.includes(idTexto)) {
-                        
                         stats.total++;
+                        stats.unicos.add(idTexto); // Contador de Produto Pai Único
+
                         let eanVal = row.getCell(colEan).value;
                         let eanAtual = eanVal ? String(eanVal).replace(/\D/g, '') : '';
-                        
                         let isVazio = (!eanAtual || eanAtual.length < 8);
                         let isDuplicado = false;
                         
-                        if (isVazio) {
-                            stats.vazios++;
-                        } else {
-                            if (setEansExistentesGlobal.has(eanAtual)) {
-                                stats.duplicados++;
-                                isDuplicado = true;
-                            } else {
-                                setEansExistentesGlobal.add(eanAtual);
-                                stats.ok++;
-                            }
+                        if (isVazio) { stats.vazios++; } 
+                        else {
+                            if (setEansExistentesGlobal.has(eanAtual)) { stats.duplicados++; isDuplicado = true; } 
+                            else { setEansExistentesGlobal.add(eanAtual); stats.ok++; }
                             if (eanAtual.length === 13 && !isNaN(eanAtual)) {
                                 let base12 = BigInt(eanAtual.substring(0, 12));
                                 if (base12 > maxBaseDetectada) maxBaseDetectada = base12;
                             }
                         }
                         
-                        todosProdutos.push({
-                            plataforma: plataformaAtual,
-                            idProd: String(idVal),
-                            idVar: varVal ? String(varVal) : String(idVal),
-                            isVazio: isVazio,
-                            isDuplicado: isDuplicado,
-                            rowNum: rowNumber,
-                            colEan: colEan,
-                            colGtinType: colGtinType 
-                        });
+                        todosProdutos.push({ plataforma: plataformaAtual, idProd: String(idVal), idVar: varVal ? String(varVal) : String(idVal), isVazio, isDuplicado, rowNum: rowNumber, colEan, colGtinType });
                     }
                 }
             });
-            
             atualizarDashboardDashboard(stats, maxBaseDetectada);
         } catch (error) { uiAlert("Erro", "Falha ao ler o arquivo Excel."); }
     };
     reader.readAsArrayBuffer(file);
 }
 
-// LER PLANILHAS DUPLAS (MERCADO LIVRE)
+// LER PLANILHAS DUPLAS (ML)
 async function lerPlanilhaML(tipo, event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -535,12 +534,9 @@ async function lerPlanilhaML(tipo, event) {
         if (mlWorkbookFicha && mlWorkbookFiscais) {
             document.getElementById('btnProcessarML').style.display = "inline-block";
         }
-    } catch (error) {
-        uiAlert("Erro", "Falha ao ler o arquivo Excel do Mercado Livre.");
-    }
+    } catch (error) { uiAlert("Erro", "Falha ao ler o arquivo Excel do Mercado Livre."); }
 }
 
-// PROCESSAR AS DUAS PLANILHAS DO MERCADO LIVRE
 function processarPlanilhasML() {
     if (!mlWorkbookFicha || !mlWorkbookFiscais) return uiAlert("Atenção", "Por favor, carregue as duas planilhas primeiro.");
 
@@ -552,28 +548,24 @@ function processarPlanilhasML() {
 
     todosProdutos = [];
     setEansExistentesGlobal = new Set();
-    let stats = { total: 0, ok: 0, vazios: 0, duplicados: 0 };
+    let stats = { total: 0, ok: 0, vazios: 0, duplicados: 0, unicos: new Set() };
     let maxBaseDetectada = 0n;
     let mapaFiscais = {};
-    
     let encontrouColunaFiscal = false;
     let encontrouColunaFicha = false;
 
-    // Vasculhar TODAS as abas dos Dados Fiscais
     mlWorkbookFiscais.eachSheet((sheet) => {
-        let colId = -1, colVar = -1, colSku = -1, colEan = -1;
+        let colId = -1, colVar = -1, colEan = -1;
         for (let r = 1; r <= 8; r++) {
             const row = sheet.getRow(r);
             row.eachCell((cell, colNumber) => {
                 const val = lerTextoCelula(cell);
                 if (val === 'código do anúncio' || val === 'id') colId = colNumber;
                 if (val === 'variation_id' || val === 'variação id') colVar = colNumber;
-                if (val === 'código do produto' || val === 'sku') colSku = colNumber;
                 if (val === 'ean' || val.includes('código de barras')) colEan = colNumber;
             });
             if (colId !== -1 && colEan !== -1) break; 
         }
-
         if (colId !== -1 && colEan !== -1) {
             encontrouColunaFiscal = true;
             sheet.eachRow((row, rowNumber) => {
@@ -582,19 +574,13 @@ function processarPlanilhasML() {
                     let varId = lerTextoCelula(row.getCell(colVar));
                     if (id.startsWith('MLB')) {
                         let chave = id + "_" + varId; 
-                        mapaFiscais[chave] = {
-                            sheetId: sheet.id, 
-                            rowNum: rowNumber,
-                            colEan: colEan,
-                            ean: lerTextoCelula(row.getCell(colEan))
-                        };
+                        mapaFiscais[chave] = { sheetId: sheet.id, rowNum: rowNumber, colEan: colEan, ean: lerTextoCelula(row.getCell(colEan)) };
                     }
                 }
             });
         }
     });
 
-    // Vasculhar TODAS as abas da Ficha Técnica
     mlWorkbookFicha.eachSheet((sheet) => {
         let colId = -1, colVar = -1, colSku = -1, colEan = -1;
         for (let r = 1; r <= 8; r++) {
@@ -608,7 +594,6 @@ function processarPlanilhasML() {
             });
             if (colId !== -1 && colEan !== -1) break;
         }
-
         if (colId !== -1 && colEan !== -1) {
             encontrouColunaFicha = true;
             sheet.eachRow((row, rowNumber) => {
@@ -618,47 +603,26 @@ function processarPlanilhasML() {
                     let sku = lerTextoCelula(row.getCell(colSku));
 
                     if (id.startsWith('MLB')) {
+                        stats.total++;
+                        stats.unicos.add(id);
                         let chave = id + "_" + varId;
                         let infoFiscais = mapaFiscais[chave];
 
                         if (infoFiscais) { 
-                            stats.total++;
                             let eanFicha = lerTextoCelula(row.getCell(colEan));
-                            let eanAtual = eanFicha || infoFiscais.ean; 
-                            eanAtual = eanAtual.replace(/\D/g, ''); 
-
+                            let eanAtual = (eanFicha || infoFiscais.ean).replace(/\D/g, ''); 
                             let isVazio = (!eanAtual || eanAtual.length < 8);
                             let isDuplicado = false;
-
-                            if (isVazio) {
-                                stats.vazios++;
-                            } else {
-                                if (setEansExistentesGlobal.has(eanAtual)) {
-                                    stats.duplicados++;
-                                    isDuplicado = true;
-                                } else {
-                                    setEansExistentesGlobal.add(eanAtual);
-                                    stats.ok++;
-                                }
+                            if (isVazio) { stats.vazios++; } 
+                            else {
+                                if (setEansExistentesGlobal.has(eanAtual)) { stats.duplicados++; isDuplicado = true; } 
+                                else { setEansExistentesGlobal.add(eanAtual); stats.ok++; }
                                 if (eanAtual.length === 13 && !isNaN(eanAtual)) {
                                     let base12 = BigInt(eanAtual.substring(0, 12));
                                     if (base12 > maxBaseDetectada) maxBaseDetectada = base12;
                                 }
                             }
-
-                            todosProdutos.push({
-                                plataforma: 'mercadolivre',
-                                idProd: id,
-                                idVar: varId || sku,
-                                isVazio: isVazio,
-                                isDuplicado: isDuplicado,
-                                sheetIdFicha: sheet.id,
-                                rowNumFicha: rowNumber,
-                                colEanFicha: colEan,
-                                sheetIdFiscais: infoFiscais.sheetId,
-                                rowNumFiscais: infoFiscais.rowNum,
-                                colEanFiscais: infoFiscais.colEan
-                            });
+                            todosProdutos.push({ plataforma: 'mercadolivre', idProd: id, idVar: varId || sku, isVazio, isDuplicado, sheetIdFicha: sheet.id, rowNumFicha: rowNumber, colEanFicha: colEan, sheetIdFiscais: infoFiscais.sheetId, rowNumFiscais: infoFiscais.rowNum, colEanFiscais: infoFiscais.colEan });
                         }
                     }
                 }
@@ -666,15 +630,12 @@ function processarPlanilhasML() {
         }
     });
 
-    if (!encontrouColunaFicha || !encontrouColunaFiscal) {
-        return uiAlert("Erro de Leitura", "Colunas de EAN não encontradas nas planilhas do Mercado Livre. Certifique-se de baixar as planilhas corretas.");
-    }
-    
+    if (!encontrouColunaFicha || !encontrouColunaFiscal) return uiAlert("Erro", "Colunas de EAN não encontradas no ML.");
     atualizarDashboardDashboard(stats, maxBaseDetectada);
 }
 
-// Atualiza o painel verde após ler qualquer planilha
 function atualizarDashboardDashboard(stats, maxBaseDetectada) {
+    if(document.getElementById('rxUnicos')) document.getElementById('rxUnicos').innerText = stats.unicos.size;
     document.getElementById('rxTotal').innerText = stats.total;
     document.getElementById('rxOk').innerText = stats.ok;
     document.getElementById('rxVazios').innerText = stats.vazios;
@@ -686,9 +647,7 @@ function atualizarDashboardDashboard(stats, maxBaseDetectada) {
         let prefixInt = BigInt(loja.prefixoLoja.padEnd(12, '0'));
         if (maxBaseDetectada >= prefixInt && String(maxBaseDetectada).startsWith(loja.prefixoLoja)) {
             baseAutoDetectada = (maxBaseDetectada + 1n).toString().padStart(12, '0');
-        } else {
-            baseAutoDetectada = obterBaseParaInput(loja);
-        }
+        } else { baseAutoDetectada = obterBaseParaInput(loja); }
         document.getElementById('codigoBase').value = baseAutoDetectada;
         fonteBaseAtual = "auto";
     } else if (maxBaseDetectada > 0n) {
@@ -699,27 +658,24 @@ function atualizarDashboardDashboard(stats, maxBaseDetectada) {
         baseAutoDetectada = "";
         puxarMemoria(true);
     }
-
     validarPrefixoGS1();
     calcularFila();
-    uiAlert("Raio-X Concluído! 🩻", `Planilha processada com sucesso.\n\nTotal de Produtos: ${stats.total}\nEANs a gerar: ${stats.vazios}\n\nAgora já pode clicar em 'Gerar Lista'.`);
+    uiAlert("Raio-X Concluído! 🩻", `Planilha processada.\n\nProdutos Únicos: ${stats.unicos.size}\nTotal Variações: ${stats.total}\nEANs a gerar: ${stats.vazios}`);
 }
 
 function calcularFila() {
     if (todosProdutos.length === 0) return;
     const modoSelecionado = document.querySelector('input[name="modo_acao"]:checked').value;
     filaDeInjecao = [];
-
     todosProdutos.forEach(prod => {
         if (modoSelecionado === 'todos') { filaDeInjecao.push(prod); } 
         else if (modoSelecionado === 'erros') { if (prod.isVazio || prod.isDuplicado) filaDeInjecao.push(prod); } 
         else { if (prod.isVazio) filaDeInjecao.push(prod); }
     });
-
     document.getElementById('qtdGerar').value = filaDeInjecao.length;
 }
 
-// ================= VALIDAÇÃO E GERAÇÃO DA LISTA =================
+// ================= VALIDAÇÃO E GERAÇÃO =================
 function calcularDigitoVerificador(base12) {
     let soma = 0;
     for (let i = 0; i < 12; i++) soma += parseInt(base12[i]) * (i % 2 === 0 ? 1 : 3);
@@ -736,13 +692,10 @@ function formatarHoraConclusao(segs) {
 function obterProximoEanLivre() {
     let eanValido = false;
     let novoEan = "";
-    let b12 = "";
-    
     while (!eanValido) {
-        b12 = sequenciaGlobalAtual.toString().padStart(12, '0');
+        let b12 = sequenciaGlobalAtual.toString().padStart(12, '0');
         novoEan = b12 + calcularDigitoVerificador(b12);
         sequenciaGlobalAtual++; 
-        
         if (!setEansExistentesGlobal.has(novoEan)) {
             setEansExistentesGlobal.add(novoEan);
             eanValido = true;
@@ -754,292 +707,187 @@ function obterProximoEanLivre() {
 function gerarTabela() {
     if (validacaoEmAndamento) return;
     const tbody = document.getElementById('corpoTabela');
-    if (filaDeInjecao.length === 0) return uiAlert("Atenção", "Não há produtos na fila para a regra selecionada.\nVerifique a planilha ou altere o Modo de Correção.");
-    
+    if (filaDeInjecao.length === 0) return uiAlert("Atenção", "Fila vazia.");
     let base = document.getElementById('codigoBase').value.replace(/\D/g, '');
-    if (base.length !== 12) return uiAlert("Formato Incorreto", "O Código Base precisa ter exatamente 12 números.");
-
+    if (base.length !== 12) return uiAlert("Erro", "Base precisa de 12 números.");
     document.getElementById('statusContainer').style.display = 'none';
     tbody.innerHTML = ""; 
-    
     sequenciaGlobalAtual = BigInt(base);
     let fragment = document.createDocumentFragment();
-
     filaDeInjecao.forEach((item, i) => {
         let ean = obterProximoEanLivre(); 
         item.eanGerado = ean;
         item.statusValidacao = 'pendente';
-
         let tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td>${i+1}</td>
-            <td class="codigo-ean" id="ean-visual-${i}">${ean}</td>
-            <td><span class="badge badge-pendente" id="status-badge-${i}">⏳ Aguardando</span></td>
-            <td class="produto-nome">
-                <span class="id-label">Prod:</span> ${item.idProd}<br>
-                <span class="id-label">Var:</span> ${item.idVar}
-            </td>
-        `;
+        tr.innerHTML = `<td>${i+1}</td><td class="codigo-ean" id="ean-visual-${i}">${ean}</td><td><span class="badge badge-pendente" id="status-badge-${i}">⏳ Aguardando</span></td><td class="produto-nome"><span class="id-label">Prod:</span> ${item.idProd}<br><span class="id-label">Var:</span> ${item.idVar}</td>`;
         fragment.appendChild(tr);
     });
     tbody.appendChild(fragment);
 }
 
+// PROTEÇÃO 2: Congela a interface para evitar erros mid-process
 function travarInterface(travado) {
-    document.querySelectorAll('.painel-controles input, .painel-controles button').forEach(el => el.disabled = travado);
-    document.getElementById('selectLoja').disabled = travado;
-    document.querySelectorAll('.seletor-loja button').forEach(el => el.disabled = travado);
+    // Desabilita todos os botões e inputs de configuração
+    const seletores = [
+        '.painel-controles input', 
+        '.painel-controles button', 
+        '#selectLoja', 
+        '.seletor-loja button',
+        '#fileUpload',
+        'input[name="plataforma"]'
+    ];
+    
+    seletores.forEach(seletor => {
+        document.querySelectorAll(seletor).forEach(el => el.disabled = travado);
+    });
+
+    // Estilo visual para o usuário entender que o sistema está ocupado
+    const container = document.getElementById('hl-acoes');
+    if (container) {
+        container.style.opacity = travado ? "0.6" : "1";
+        container.style.pointerEvents = travado ? "none" : "auto";
+    }
 }
 
 function alternarPausa() {
     isPausadoManual = !isPausadoManual;
     const btn = document.getElementById('btnPausar');
-    const timer = document.getElementById('timer');
-    const progresso = document.getElementById('progresso');
-
     if (isPausadoManual) {
-        btn.innerHTML = "▶️ Retomar Validação";
-        btn.classList.add('modo-retomar');
-        timer.innerText = "⏸️ PAUSADO PELO USUÁRIO";
-        progresso.innerText = "Aguardando retomada...";
+        btn.innerHTML = "▶️ Retomar Validação"; btn.classList.add('modo-retomar');
     } else {
-        btn.innerHTML = "⏸️ Pausar Validação";
-        btn.classList.remove('modo-retomar');
+        btn.innerHTML = "⏸️ Pausar Validação"; btn.classList.remove('modo-retomar');
     }
 }
 
 async function verificarNoBanco() {
     const linhas = document.querySelectorAll('#corpoTabela tr');
-    if (linhas.length === 0) return uiAlert("Passo Ausente", "Gere a lista primeiro clicando no botão 'Gerar Lista'.");
-    
-    validacaoEmAndamento = true;
-    isPausadoManual = false;
-    let validacaoCancelada = false;
-    travarInterface(true);
-
+    if (linhas.length === 0) return uiAlert("Erro", "Gere a lista primeiro.");
+    validacaoEmAndamento = true; isPausadoManual = false; travarInterface(true);
     document.getElementById('statusContainer').style.display = 'block';
     document.getElementById('btnPausar').style.display = 'inline-flex';
-    document.getElementById('btnPausar').innerHTML = "⏸️ Pausar Validação";
-    document.getElementById('btnPausar').classList.remove('modo-retomar');
-
     const progresso = document.getElementById('progresso');
     const timer = document.getElementById('timer');
     const conclusao = document.getElementById('horaConclusao');
-
-    const isModoOfflineRisk = document.getElementById('checkOffline').checked;
+    const isOffline = document.getElementById('checkOffline').checked;
     const total = linhas.length;
-    let tempoInicio = Date.now();
-    let limiteAtingido = false;
-    let validadosConcluidos = 0;
+    let tempoInicio = Date.now(), validadosConcluidos = 0;
     const TAMANHO_LOTE = 3;
 
     async function processarItem(i) {
-        if (limiteAtingido || validacaoCancelada) return;
-
-        let linha = linhas[i];
-        let ean = filaDeInjecao[i].eanGerado; 
-        let celulaStatus = linha.querySelector('td:nth-child(3)');
-
-        if (isModoOfflineRisk) {
+        let ean = filaDeInjecao[i].eanGerado, celulaStatus = linhas[i].querySelector('td:nth-child(3)');
+        if (isOffline) {
             filaDeInjecao[i].statusValidacao = 'offline';
             celulaStatus.innerHTML = `<span class="badge badge-offline">✅ Aprovado</span>`;
-            validadosConcluidos++;
-            return;
+            validadosConcluidos++; return;
         }
-
-        if (i % TAMANHO_LOTE === 0) linha.scrollIntoView({ behavior: "smooth", block: "center" });
+        if (i % TAMANHO_LOTE === 0) linhas[i].scrollIntoView({ behavior: "smooth", block: "center" });
         celulaStatus.innerHTML = `<span class="badge" style="background:#e0f2fe; color:#0284c7;">Buscando...</span>`;
-
         let processado = false;
-        while (!processado && !validacaoCancelada && !limiteAtingido) {
-            while (isPausadoManual) { await new Promise(r => setTimeout(r, 500)); }
-            if (validacaoCancelada || limiteAtingido) break;
-
+        while (!processado) {
+            while (isPausadoManual) await new Promise(r => setTimeout(r, 500));
             try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 10000); 
-
-                let res = await fetch(`${URL_DO_PROXY}/${ean}`, { 
-                    headers: { 'X-Cosmos-Token': API_TOKEN },
-                    signal: controller.signal
-                });
-                clearTimeout(timeoutId);
-
+                let res = await fetch(`${URL_DO_PROXY}/${ean}`, { headers: { 'X-Cosmos-Token': API_TOKEN } });
                 if (res.status === 200) { 
-                    ean = obterProximoEanLivre();
-                    filaDeInjecao[i].eanGerado = ean; 
-                    linha.querySelector('.codigo-ean').innerText = ean; 
+                    ean = obterProximoEanLivre(); filaDeInjecao[i].eanGerado = ean; 
+                    linhas[i].querySelector('.codigo-ean').innerText = ean;
                     celulaStatus.innerHTML = `<span class="badge badge-buscando">🔄 Recalculando...</span>`;
-                    await new Promise(r => setTimeout(r, 600)); 
-                } 
-                else if (res.status === 404) { 
-                    filaDeInjecao[i].statusValidacao = 'aprovado';
-                    celulaStatus.innerHTML = `<span class="badge badge-livre">Livre</span>`; 
-                    processado = true; 
-                } 
-                else if (res.status === 429) {
-                    for(let j = validadosConcluidos; j < total; j++) {
-                        if(filaDeInjecao[j].statusValidacao !== 'aprovado' && filaDeInjecao[j].statusValidacao !== 'em_uso') {
-                            filaDeInjecao[j].statusValidacao = 'offline';
-                            linhas[j].querySelector('td:nth-child(3)').innerHTML = `<span class="badge badge-offline">✅ Aprovado (Limite API)</span>`;
-                        }
-                    }
-                    processado = true;
-                    limiteAtingido = true;
-                    break; 
-                }
-                else if (res.status === 401) {
-                    validacaoCancelada = true;
-                    uiAlert("Erro de Autenticação 🛑", "O seu Token da API Cosmos é inválido ou expirou.");
-                    celulaStatus.innerHTML = `<span class="badge badge-erro">Erro de Token</span>`;
-                    break;
-                }
-                else { 
-                    filaDeInjecao[i].statusValidacao = 'aprovado';
-                    celulaStatus.innerHTML = `<span class="badge badge-offline">✅ Aprovado (Forçado)</span>`; 
-                    processado = true; 
-                }
-            } catch (e) { 
-                if (e.name === 'AbortError') {
-                    filaDeInjecao[i].statusValidacao = 'offline';
-                    celulaStatus.innerHTML = `<span class="badge badge-offline">✅ Aprovado (Timeout)</span>`;
-                    processado = true;
+                    await new Promise(r => setTimeout(r, 600));
                 } else {
-                    celulaStatus.innerHTML = `<span class="badge badge-erro">🛑 Pausado</span>`;
-                    if (!isPausadoManual && !validacaoCancelada) {
-                        alternarPausa(); 
-                        let retomar = await uiConfirmAsync("Conexão Interrompida", "A comunicação com o banco falhou. Tentar de novo?", "✅ Conexão ok, retomar!");
-                        if (retomar) alternarPausa(); 
-                        else validacaoCancelada = true;
-                    } else {
-                        while (isPausadoManual && !validacaoCancelada) { await new Promise(r => setTimeout(r, 500)); }
-                    }
-                    if(!validacaoCancelada) celulaStatus.innerHTML = `<span class="badge badge-buscando">🔄 Retomando...</span>`;
+                    filaDeInjecao[i].statusValidacao = 'aprovado';
+                    celulaStatus.innerHTML = `<span class="badge badge-livre">Livre</span>`;
+                    processado = true;
                 }
-            }
-        } 
+            } catch (e) { await new Promise(r => setTimeout(r, 2000)); }
+        }
         validadosConcluidos++;
     }
 
     for (let i = 0; i < total; i += TAMANHO_LOTE) {
-        if (validacaoCancelada || limiteAtingido) break;
-        while (isPausadoManual) { await new Promise(r => setTimeout(r, 500)); tempoInicio += 500; }
-
-        let tempoPassado = (Date.now() - tempoInicio) / 1000;
-        let media = validadosConcluidos > 0 ? tempoPassado / validadosConcluidos : 1.5; 
-        let segsRestantes = (total - validadosConcluidos) * media;
-
+        let lote = [];
+        for (let j = i; j < i + TAMANHO_LOTE && j < total; j++) lote.push(processarItem(j));
+        await Promise.all(lote);
+        let segsRestantes = (total - validadosConcluidos) * 1.5;
         timer.innerText = `⏱️ Restante: ${formatarTempo(segsRestantes)}`;
         conclusao.innerText = formatarHoraConclusao(segsRestantes);
-        progresso.innerText = `Validando no Banco: ${Math.min(i + TAMANHO_LOTE, total)} de ${total}`;
-
-        let lote = [];
-        for (let j = i; j < i + TAMANHO_LOTE && j < total; j++) { lote.push(processarItem(j)); }
-        await Promise.all(lote); 
-
-        if (isModoOfflineRisk && validadosConcluidos >= total) break;
-        if (!isModoOfflineRisk) await new Promise(r => setTimeout(r, 800)); 
-        else await new Promise(r => setTimeout(r, 10)); 
+        progresso.innerText = `Validando: ${Math.min(i + TAMANHO_LOTE, total)} de ${total}`;
+        await new Promise(r => setTimeout(r, isOffline ? 10 : 800));
     }
-    
-    if (validacaoCancelada) {
-        progresso.innerText = "Processo Cancelado pelo Usuário.";
-        timer.innerText = "-"; conclusao.innerText = "-";
-    } else if (limiteAtingido) {
-        progresso.innerText = "Validação Concluída! (Cota da API Atingida)";
-        timer.innerText = "✅ Finalizado!"; conclusao.innerText = "-";
-    } else {
-        progresso.innerText = "Validação Concluída! Pode baixar a planilha.";
-        timer.innerText = "✅ Finalizado!"; conclusao.innerText = "-";
-    }
-
-    validacaoEmAndamento = false;
-    travarInterface(false);
+    validacaoEmAndamento = false; travarInterface(false);
     document.getElementById('btnPausar').style.display = 'none';
 }
 
-// ================= EXPORTAÇÃO INTELIGENTE (TODAS AS PLATAFORMAS) =================
 async function exportarPlanilha() {
-    if(filaDeInjecao.length === 0) return;
-    if(plataformaAtual !== 'mercadolivre' && !originalWorkbook) return;
-    if(plataformaAtual === 'mercadolivre' && (!mlWorkbookFicha || !mlWorkbookFiscais)) return;
-
-    let eansValidados = [];
-    let logConteudo = "ID_Produto\tID_Variante\tEAN_Atribuido\tPlataforma\n"; 
-    let possuiErro = false;
+    if(filaDeInjecao.length === 0) {
+        return uiAlert("Ação Negada", "Não há EANs processados para exportar. Por favor, importe a planilha e clique em 'Gerar Lista' primeiro.");
+    }
+    
+    let logPorProduto = {}; 
+    const dataAtual = new Date();
+    const carimbo = `${String(dataAtual.getDate()).padStart(2, '0')}-${String(dataAtual.getMonth() + 1).padStart(2, '0')}_${String(dataAtual.getHours()).padStart(2, '0')}h${String(dataAtual.getMinutes()).padStart(2, '0')}`;
 
     filaDeInjecao.forEach(item => {
-        if (item.statusValidacao === 'em_uso' || item.statusValidacao === 'erro') possuiErro = true;
-        
         if (item.statusValidacao === 'aprovado' || item.statusValidacao === 'offline') {
-            eansValidados.push(item.eanGerado);
-
             if (item.plataforma !== 'mercadolivre') {
                 originalWorksheet.getCell(item.rowNum, item.colEan).value = String(item.eanGerado);
                 if (item.plataforma === 'tiktok' && item.colGtinType && item.colGtinType !== -1) {
                     originalWorksheet.getCell(item.rowNum, item.colGtinType).value = "EAN";
                 }
             } else {
-                let sheetFicha = mlWorkbookFicha.getWorksheet(item.sheetIdFicha);
-                sheetFicha.getCell(item.rowNumFicha, item.colEanFicha).value = String(item.eanGerado);
-                
-                let sheetFiscais = mlWorkbookFiscais.getWorksheet(item.sheetIdFiscais);
-                sheetFiscais.getCell(item.rowNumFiscais, item.colEanFiscais).value = String(item.eanGerado);
+                mlWorkbookFicha.getWorksheet(item.sheetIdFicha).getCell(item.rowNumFicha, item.colEanFicha).value = String(item.eanGerado);
+                mlWorkbookFiscais.getWorksheet(item.sheetIdFiscais).getCell(item.rowNumFiscais, item.colEanFiscais).value = String(item.eanGerado);
             }
-            logConteudo += `${item.idProd}\t${item.idVar}\t${item.eanGerado}\t${plataformaAtual}\n`;
+            if (!logPorProduto[item.idProd]) logPorProduto[item.idProd] = [];
+            logPorProduto[item.idProd].push({ var: item.idVar, ean: item.eanGerado });
         }
     });
 
-    if (possuiErro) return uiAlert("Atenção", "Códigos 'Em Uso' foram encontrados.\nPor favor, altere o Código Base e gere novamente.");
-    if (eansValidados.length < filaDeInjecao.length) return uiAlert("Atenção", "Precisa de validar a lista completa antes de descarregar o ficheiro.");
-
-    const ultimoEan = eansValidados[eansValidados.length - 1];
+    const ultimoEan = filaDeInjecao[filaDeInjecao.length - 1].eanGerado;
     bancoLojas[lojaAtivaId].ultimoEan = ultimoEan;
     bancoLojas[lojaAtivaId].base12 = ultimoEan.substring(0, 12);
-    salvarCofreLojas();
-    atualizarUI_Memoria(); 
+    salvarCofreLojas(); atualizarUI_Memoria();
 
-    let prefixo = "";
-    let modo = document.querySelector('input[name="modo_acao"]:checked').value;
-    if (modo === 'todos') prefixo = "COMPLETA_";
-    if (modo === 'erros') prefixo = "CORRIGIDA_";
-    if (modo === 'vazios') prefixo = "VAZIOS_";
+    let prefixoModo = document.querySelector('input[name="modo_acao"]:checked').value.toUpperCase() + "_";
+    
+    uiAlert("📄 Preparando Arquivos", 
+        "Sua planilha atualizada e o Relatório (LOG) serão baixados agora.<br><br><b>Atenção:</b> O seu navegador pode pedir permissão para baixar vários arquivos. Clique em <b>Permitir</b>.", 
+        false, 
+        async () => {
+            // 1. Prepara o conteúdo do LOG primeiro (muito rápido)
+            let txt = `=========================================\nRELATÓRIO EAN MASTER PRO: ${plataformaAtual.toUpperCase()}\nLoja: ${bancoLojas[lojaAtivaId].nome}\nData: ${dataAtual.toLocaleString()}\n=========================================\n\n`;
+            for (let id in logPorProduto) {
+                txt += `Produto Pai ID: ${id}\n`;
+                logPorProduto[id].forEach(v => txt += `  - Var ID: ${v.var}  ->  EAN: ${v.ean}\n`);
+                txt += `\n`;
+            }
+            
+            const baixarO_Log = () => {
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain' }));
+                link.download = `LOG_${plataformaAtual.toUpperCase()}_${carimbo}.txt`;
+                link.click();
+            };
 
-    if (plataformaAtual !== 'mercadolivre') {
-        let nomeFinal = prefixo + originalFileName;
-        const buffer = await originalWorkbook.xlsx.writeBuffer();
-        baixarArquivoLocal(buffer, nomeFinal);
-    } else {
-        let nomeFicha = prefixo + "Ficha_Tecnica.xlsx";
-        let nomeFiscais = prefixo + "Dados_Fiscais.xlsx";
-        const bufferFicha = await mlWorkbookFicha.xlsx.writeBuffer();
-        baixarArquivoLocal(bufferFicha, nomeFicha);
-
-        setTimeout(async () => {
-            const bufferFiscais = await mlWorkbookFiscais.xlsx.writeBuffer();
-            baixarArquivoLocal(bufferFiscais, nomeFiscais);
-        }, 1000);
-    }
-
-    uiAlert("🎉 CONCLUÍDO COM SUCESSO!", `Os seus EANs foram processados e a planilha transferida!`);
-
-    setTimeout(() => {
-        const blobLog = new Blob([logConteudo], { type: 'text/plain' });
-        const linkLog = document.createElement("a");
-        linkLog.href = URL.createObjectURL(blobLog);
-        let nomeLog = plataformaAtual === 'mercadolivre' ? 'MercadoLivre' : originalFileName;
-        linkLog.download = `LOG_${nomeLog.replace('.xlsx', '.txt')}`;
-        document.body.appendChild(linkLog);
-        linkLog.click();
-        document.body.removeChild(linkLog);
-    }, 2500);
+            // 2. Dispara os downloads quase que instantaneamente
+            if (plataformaAtual !== 'mercadolivre') {
+                let nomeBase = originalFileName.substring(0, originalFileName.lastIndexOf('.'));
+                let extensao = originalFileName.substring(originalFileName.lastIndexOf('.'));
+                baixarArquivoLocal(await originalWorkbook.xlsx.writeBuffer(), `${prefixoModo}${nomeBase}_${carimbo}${extensao}`);
+                
+                setTimeout(baixarO_Log, 300); // Apenas 0.3 segundos de intervalo
+            } else {
+                baixarArquivoLocal(await mlWorkbookFicha.xlsx.writeBuffer(), `${prefixoModo}ML_FICHA_${carimbo}.xlsx`);
+                
+                setTimeout(async () => {
+                    baixarArquivoLocal(await mlWorkbookFiscais.xlsx.writeBuffer(), `${prefixoModo}ML_FISCAIS_${carimbo}.xlsx`);
+                }, 300);
+                
+                setTimeout(baixarO_Log, 600); // 0.6 segundos depois pro Log
+            }
+        }
+    );
 }
 
-function baixarArquivoLocal(buffer, nomeFinal) {
-    const linkExcel = document.createElement("a");
-    linkExcel.href = URL.createObjectURL(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-    linkExcel.download = nomeFinal;
-    document.body.appendChild(linkExcel);
-    linkExcel.click();
-    document.body.removeChild(linkExcel);
+function baixarArquivoLocal(buffer, nome) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([buffer])); a.download = nome; a.click();
 }

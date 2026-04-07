@@ -11,6 +11,7 @@ let plataformaAtual = 'shopee';
 let bancoLojas = {
     'default': { nome: 'Loja Principal', ultimoEan: null, base12: null }
 };
+
 let lojaAtivaId = 'default';
 
 let sequenciaGlobalAtual = 0n;
@@ -252,12 +253,14 @@ function obterBaseParaInput(loja) {
 }
 
 function carregarCofreLojas() {
-    const salvo = localStorage.getItem('ean_master_lojas');
-    if (salvo) {
-        bancoLojas = JSON.parse(salvo);
+    // 1. Carrega o que tem no PC primeiro
+    const salvoLocal = localStorage.getItem('ean_master_lojas');
+    if (salvoLocal) {
+        bancoLojas = JSON.parse(salvoLocal);
     } else {
         salvarCofreLojas();
     }
+    
     lojaAtivaId = localStorage.getItem('ean_master_loja_ativa') || 'default';
     if (!bancoLojas[lojaAtivaId]) lojaAtivaId = 'default';
 
@@ -266,11 +269,50 @@ function carregarCofreLojas() {
     const loja = bancoLojas[lojaAtivaId];
     document.getElementById('codigoBase').value = obterBaseParaInput(loja);
     validarPrefixoGS1();
+
+    // 2. Busca da nuvem pelo UID para garantir que não perdeu a contagem
+    const user = firebase.auth().currentUser;
+    if (user) {
+        const db = firebase.firestore();
+        db.collection("usuarios").doc(user.uid).get().then((doc) => {
+            if (doc.exists) {
+                const dadosNuvem = doc.data();
+                
+                // Se a nuvem tiver dados de lojas, ele substitui
+                if (dadosNuvem.bancoLojas) {
+                    bancoLojas = dadosNuvem.bancoLojas;
+                    lojaAtivaId = dadosNuvem.lojaAtivaId || lojaAtivaId;
+                    
+                    // Salva a versão da nuvem no PC atual
+                    localStorage.setItem('ean_master_lojas', JSON.stringify(bancoLojas));
+                    localStorage.setItem('ean_master_loja_ativa', lojaAtivaId);
+
+                    // Atualiza a tela com os dados reais
+                    atualizarSelectLojas();
+                    atualizarUI_Memoria();
+                    document.getElementById('codigoBase').value = obterBaseParaInput(bancoLojas[lojaAtivaId]);
+                    validarPrefixoGS1();
+                }
+            }
+        }).catch(e => console.log("Aviso: Falha ao buscar da nuvem.", e));
+    }
 }
 
 function salvarCofreLojas() {
+    // 1. Salva localmente (para a tela atualizar rápido)
     localStorage.setItem('ean_master_lojas', JSON.stringify(bancoLojas));
     localStorage.setItem('ean_master_loja_ativa', lojaAtivaId);
+
+    // 2. Salva na Nuvem usando o UID seguro do Firebase Auth
+    const user = firebase.auth().currentUser;
+    if (user) {
+        const db = firebase.firestore();
+        db.collection("usuarios").doc(user.uid).set({
+            bancoLojas: bancoLojas,
+            lojaAtivaId: lojaAtivaId
+        }, { merge: true }) // O merge evita apagar outros dados do usuário sem querer
+        .catch(e => console.log("Aviso: Falha ao sincronizar na nuvem.", e));
+    }
 }
 
 function atualizarSelectLojas() {
@@ -374,7 +416,6 @@ function limparMemoriaInterna() {
     });
 }
 
-// ================= RADAR GS1 =================
 function validarPrefixoGS1() {
     const input = document.getElementById('codigoBase');
     const aviso = document.getElementById('avisoGS1');
@@ -385,8 +426,15 @@ function validarPrefixoGS1() {
         const loja = bancoLojas[lojaAtivaId];
         
         if (loja.prefixoLoja && !val.startsWith(loja.prefixoLoja)) {
-            aviso.innerHTML = `🚨 LIMITE ULTRAPASSADO: O contador estourou e o prefixo original (${loja.prefixoLoja}) mudou.`;
-            aviso.style.color = "#dc2626"; 
+            // Verifica se ele fez o pulo pro 790
+            let prefixo790 = '790' + loja.prefixoLoja.substring(3);
+            if (val.startsWith(prefixo790)) {
+                aviso.innerHTML = `✅ Prefixo 790 ativado! (A cota do 789 esgotou e o sistema pulou automaticamente).`;
+                aviso.style.color = "#059669"; 
+            } else {
+                aviso.innerHTML = `🚨 LIMITE ULTRAPASSADO: O contador estourou o prefixo.`;
+                aviso.style.color = "#dc2626"; 
+            }
         } 
         else if (val.length === 12 && loja.prefixoLoja && val.startsWith(loja.prefixoLoja)) {
             const prefixoLength = loja.prefixoLoja.length;
@@ -396,22 +444,22 @@ function validarPrefixoGS1() {
                 const faltam = limiteLote - sequenciaAtual;
 
                 if (faltam <= 300) { 
-                    aviso.innerHTML = `⚠️ ALERTA DE LOTE: Restam apenas <b>${faltam} códigos</b> antes do limite ser atingido!`;
+                    aviso.innerHTML = `⚠️ ALERTA: Restam apenas <b>${faltam}</b> códigos! (Após isso, pularemos para 790).`;
                     aviso.style.color = "#ea580c"; 
                 } else {
                     aviso.innerHTML = `✅ Prefixo da loja reconhecido. (Livre: <b>${faltam}</b> códigos)`;
                     aviso.style.color = "#059669"; 
                 }
             } else {
-                aviso.innerHTML = `✅ Prefixo de 12 dígitos reconhecido.`;
+                aviso.innerHTML = `✅ Base de 12 dígitos reconhecida.`;
                 aviso.style.color = "#059669";
             }
         } 
         else if (!val.startsWith('789') && !val.startsWith('790')) {
-            aviso.innerHTML = "⚠️ Atenção: Padrão GS1 Brasil costuma iniciar com 789 ou 790.";
+            aviso.innerHTML = "⚠️ Atenção: Recomendado iniciar com 789 ou 790.";
             aviso.style.color = "#d97706"; 
         } else {
-            aviso.innerHTML = "✅ Prefixo padrão Brasil detectado.";
+            aviso.innerHTML = "✅ Prefixo padrão detectado.";
             aviso.style.color = "#059669"; 
         }
     } else {
@@ -773,10 +821,36 @@ function formatarHoraConclusao(segs) {
 function obterProximoEanLivre() {
     let eanValido = false;
     let novoEan = "";
+    let loja = bancoLojas[lojaAtivaId]; // Pega os dados da loja
+
     while (!eanValido) {
         let b12 = sequenciaGlobalAtual.toString().padStart(12, '0');
+
+        // SISTEMA INTELIGENTE DE PULO (789 -> 790)
+        if (loja && loja.prefixoLoja && loja.prefixoLoja.startsWith('789')) {
+            // Se o contador estourou e o número atual não começa mais com o prefixo original
+            if (!b12.startsWith(loja.prefixoLoja)) {
+                
+                // Troca o 789 inicial por 790
+                let novoPrefixo = '790' + loja.prefixoLoja.substring(3);
+                
+                // Preenche o resto com zeros até dar 12 dígitos
+                let novaBase = novoPrefixo.padEnd(12, '0');
+                
+                // Atualiza o contador global
+                sequenciaGlobalAtual = BigInt(novaBase);
+                b12 = sequenciaGlobalAtual.toString();
+                
+                // Atualiza a loja silenciosamente para não dar erro na tela
+                loja.prefixoLoja = novoPrefixo;
+                salvarCofreLojas(); 
+            }
+        }
+
+        // Calcula o EAN final com o dígito verificador
         novoEan = b12 + calcularDigitoVerificador(b12);
         sequenciaGlobalAtual++; 
+        
         if (!setEansExistentesGlobal.has(novoEan)) {
             setEansExistentesGlobal.add(novoEan);
             eanValido = true;
@@ -867,7 +941,12 @@ async function verificarNoBanco() {
         while (!processado) {
             while (isPausadoManual) await new Promise(r => setTimeout(r, 500));
             try {
-                let res = await fetch(`${URL_DO_PROXY}/${ean}`, { headers: { 'X-Cosmos-Token': API_TOKEN } });
+                let res = await fetch(`${URL_DO_PROXY}/${ean}`, { 
+    headers: { 
+        'X-Cosmos-Token': API_TOKEN,
+        'X-App-Secret': 'EanMasterPro_Segredo_2024!@#' 
+    } 
+});
                 if (res.status === 200) { 
                     ean = obterProximoEanLivre(); filaDeInjecao[i].eanGerado = ean; 
                     linhas[i].querySelector('.codigo-ean').innerText = ean;

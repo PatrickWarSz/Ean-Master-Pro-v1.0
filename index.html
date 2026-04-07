@@ -6,6 +6,7 @@
     <title>EAN Master Pro - Gestão Multiplataforma</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
@@ -31,11 +32,25 @@
         <button class="tour-btn" onclick="proximoPassoTutorial()">Entendi, próximo</button>
     </div>
 
-    <div id="tela-login" class="tela container" style="max-width: 400px; margin-top: 50px;">
-        <div class="header" style="border:none; text-align: center; justify-content: center;">
-            <h2 style="color: var(--shopee-laranja); font-size: 28px;">EAN MASTER PRO</h2>
-            <p>Faça login para acessar o sistema</p>
+   <div id="tela-login" class="tela container auth-container">
+    <div class="auth-tabs">
+        <button class="auth-tab ativa" id="tabLogin" onclick="alternarAuth('login')">Entrar</button>
+        <button class="auth-tab" id="tabCadastro" onclick="alternarAuth('cadastro')">Cadastrar-se</button>
+    </div>
+
+    <div id="formLogin" class="auth-form ativo">
+        <div class="header" style="border:none; text-align: center; justify-content: center; padding-bottom: 0;">
+            <h2 style="color: var(--shopee-laranja); font-size: 26px;">Bem-vindo de volta!</h2>
+            <p style="margin-bottom: 20px;">Faça login para acessar o sistema</p>
         </div>
+        
+        <button class="btn-google" onclick="loginComGoogle()">
+            <img src="https://img.icons8.com/color/48/000000/google-logo.png" alt="Google" style="width: 20px; height: 20px;">
+            Entrar com o Google
+        </button>
+        
+        <div class="divisor"><span>OU COM E-MAIL</span></div>
+        
         <div class="grupo-input" style="margin-bottom: 15px;">
             <label>E-mail:</label>
             <input type="email" id="emailLogin" placeholder="seu@email.com">
@@ -44,9 +59,33 @@
             <label>Senha:</label>
             <input type="password" id="senhaLogin" placeholder="******">
         </div>
-        <button class="btn-primario" style="width: 100%; margin-bottom: 15px;" onclick="fazerLogin()">Entrar no Sistema 🚀</button>
-        <p style="text-align: center; font-size: 12px; color: #64748b;">Gestão de cadastro em massa de EAN</p>
+        <button class="btn-primario" style="width: 100%; margin-bottom: 10px;" onclick="fazerLogin()">Acessar Painel 🚀</button>
     </div>
+
+    <div id="formCadastro" class="auth-form" style="display: none;">
+        <div class="header" style="border:none; text-align: center; justify-content: center; padding-bottom: 0;">
+            <h2 style="color: var(--info); font-size: 26px;">Crie sua Conta</h2>
+            <p style="margin-bottom: 20px;">Comece a gerenciar seus EANs agora</p>
+        </div>
+
+        <button class="btn-google" onclick="loginComGoogle()">
+            <img src="https://img.icons8.com/color/48/000000/google-logo.png" alt="Google" style="width: 20px; height: 20px;">
+            Cadastrar com o Google
+        </button>
+        
+        <div class="divisor"><span>OU COM E-MAIL</span></div>
+
+        <div class="grupo-input" style="margin-bottom: 15px;">
+            <label>E-mail:</label>
+            <input type="email" id="emailCadastro" placeholder="seu@email.com">
+        </div>
+        <div class="grupo-input" style="margin-bottom: 25px;">
+            <label>Crie uma Senha:</label>
+            <input type="password" id="senhaCadastro" placeholder="Mínimo 6 caracteres">
+        </div>
+        <button class="btn-primario" style="width: 100%; background: var(--info); margin-bottom: 10px;" onclick="fazerCadastro()">Criar Conta ✨</button>
+    </div>
+</div>
 
     <div id="tela-setup" class="tela container">
         <div class="header" style="border:none; padding-bottom: 10px;">
@@ -67,10 +106,20 @@
         </div>
 
         <div class="setup-passo">
-            <h3>🔑 Passo 1: Chave do Cosmos (API)</h3>
-            <p>Insira seu token para validar os códigos no banco de dados GS1.</p>
-            <input type="text" id="inputToken" class="input-token" placeholder="Cole sua Chave/Token aqui...">
-            <div style="text-align: right;">
+            <h3>🔑 Passo 1: Conectar ao Banco de Dados (Gratuito)</h3>
+            <p style="margin-bottom: 15px;">Para o sistema funcionar, precisamos conectá-lo ao maior banco de dados de EANs do Brasil (Bluesoft Cosmos) para garantir que seus códigos nunca sejam duplicados na internet.</p>
+            
+            <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <p style="margin-top: 0; font-weight: 800; color: #1e3a8a;">Siga estes 3 passos simples:</p>
+                <ol class="lista-instrucoes" style="margin-bottom: 0; color: #1e40af;">
+                    <li>Acesse o portal <a href="https://cosmos.bluesoft.com.br/" target="_blank" style="color: #2563eb; font-weight: 900; text-decoration: underline;">Cosmos Bluesoft clicando aqui</a> e crie uma conta gratuita (pode ser com o Google).</li>
+                    <li>Após fazer o login lá, clique no seu nome no canto superior direito e vá em <b>"API"</b>.</li>
+                    <li>copie a sua <b>"Chave de Autenticação" Seu Token (API)</b> e cole-a no campo abaixo.</li>
+                </ol>
+            </div>
+
+            <input type="text" id="inputToken" class="input-token" placeholder="Cole a sua Chave de Autenticação aqui...">
+            <div style="text-align: right; margin-top: 15px;">
                 <button class="btn-primario" onclick="salvarSetup()">Concluir e Acessar 🚀</button>
             </div>
         </div>

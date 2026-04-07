@@ -15,27 +15,106 @@ let lojaAtivaId = 'default';
 
 let sequenciaGlobalAtual = 0n;
 
-// ====== NOVO: SISTEMA DE LOGIN (V2) ======
-function inicializarSistema() {
-    // Verifica se já existe uma sessão ativa nesta aba
-    const usuarioLogado = sessionStorage.getItem('ean_master_sessao');
-    
-    if (!usuarioLogado) {
-        mostrarTela('tela-login');
+// ====== SISTEMA DE LOGIN FIREBASE E NUVEM ======
+const firebaseConfig = {
+    apiKey: "AIzaSyBXFynatu21jBHnMyM_yfoDgunE3kqDM4k",
+    authDomain: "ean-master-pro.firebaseapp.com",
+    projectId: "ean-master-pro",
+    storageBucket: "ean-master-pro.firebasestorage.app",
+    messagingSenderId: "387761437602",
+    appId: "1:387761437602:web:050da0d4091c55475790fb"
+};
+
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
+
+// 1. Lógica para as ABAS da tela de Login funcionarem
+function alternarAuth(tipo) {
+    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('ativa'));
+    document.querySelectorAll('.auth-form').forEach(f => {
+        f.classList.remove('ativo');
+        f.style.display = 'none';
+    });
+
+    if (tipo === 'login') {
+        document.getElementById('tabLogin').classList.add('ativa');
+        const form = document.getElementById('formLogin');
+        form.style.display = 'block';
+        setTimeout(() => form.classList.add('ativo'), 10);
     } else {
-        verificarTokenCosmos();
+        document.getElementById('tabCadastro').classList.add('ativa');
+        const form = document.getElementById('formCadastro');
+        form.style.display = 'block';
+        setTimeout(() => form.classList.add('ativo'), 10);
     }
 }
 
+function inicializarSistema() {
+    firebase.auth().onAuthStateChanged((user) => {
+        if (user) {
+            sessionStorage.setItem('ean_master_sessao', user.email);
+            verificarTokenCosmos();
+        } else {
+            sessionStorage.removeItem('ean_master_sessao');
+            mostrarTela('tela-login');
+        }
+    });
+}
+
+function loginComGoogle() {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    firebase.auth().signInWithPopup(provider)
+        .then((result) => {
+            sessionStorage.setItem('ean_master_sessao', result.user.email);
+            verificarTokenCosmos();
+        }).catch((error) => {
+            uiAlert("Erro", "O login com o Google falhou: " + error.message);
+        });
+}
+
+// 2. Função conectada à aba de CADASTRO
+function fazerCadastro() {
+    const email = document.getElementById('emailCadastro').value;
+    const senha = document.getElementById('senhaCadastro').value;
+    
+    if(!email || !senha) return uiAlert("Atenção", "Preencha e-mail e senha para se cadastrar.");
+    if(senha.length < 6) return uiAlert("Segurança", "A senha precisa ter no mínimo 6 caracteres.");
+
+    firebase.auth().createUserWithEmailAndPassword(email, senha)
+        .then((userCredential) => {
+            sessionStorage.setItem('ean_master_sessao', userCredential.user.email);
+            uiAlert("Sucesso 🎉", "Conta criada com sucesso!", false, () => verificarTokenCosmos());
+        })
+        .catch((error) => {
+            let msg = error.code === 'auth/email-already-in-use' ? 'Este e-mail já está cadastrado.' : error.message;
+            uiAlert("Erro no Cadastro", msg);
+        });
+}
+
+// 3. Função conectada à aba de LOGIN
 function fazerLogin() {
     const email = document.getElementById('emailLogin').value;
     const senha = document.getElementById('senhaLogin').value;
     
-    if(email === "" || senha === "") return alert("Preencha e-mail e senha.");
+    if(!email || !senha) return uiAlert("Atenção", "Preencha e-mail e senha.");
     
-    // Simulação de login - No futuro aqui conectamos ao banco de dados real
-    sessionStorage.setItem('ean_master_sessao', email);
-    verificarTokenCosmos();
+    firebase.auth().signInWithEmailAndPassword(email, senha)
+        .then((userCredential) => {
+            sessionStorage.setItem('ean_master_sessao', userCredential.user.email);
+            verificarTokenCosmos();
+        }).catch((error) => {
+            uiAlert("Acesso Negado 🛑", "E-mail ou senha incorretos.");
+        });
+}
+
+function recuperarSenha() {
+    const email = document.getElementById('emailLogin').value;
+    if(email === "") return uiAlert("Esqueceu a senha?", "Digite o seu e-mail no campo acima e clique em esqueci a senha novamente.");
+
+    firebase.auth().sendPasswordResetEmail(email)
+        .then(() => uiAlert("Recuperação 📧", `E-mail enviado para: <b>${email}</b>`))
+        .catch(() => uiAlert("Erro", "E-mail não encontrado."));
 }
 
 function verificarTokenCosmos() {
@@ -53,8 +132,10 @@ function verificarTokenCosmos() {
 }
 
 function logout() {
-    sessionStorage.removeItem('ean_master_sessao');
-    location.reload();
+    firebase.auth().signOut().then(() => {
+        sessionStorage.removeItem('ean_master_sessao');
+        location.reload();
+    }).catch(e => console.error(e));
 }
 // =========================================
 
@@ -844,45 +925,52 @@ async function exportarPlanilha() {
     const ultimoEan = filaDeInjecao[filaDeInjecao.length - 1].eanGerado;
     bancoLojas[lojaAtivaId].ultimoEan = ultimoEan;
     bancoLojas[lojaAtivaId].base12 = ultimoEan.substring(0, 12);
-    salvarCofreLojas(); atualizarUI_Memoria();
+    salvarCofreLojas(); 
+    atualizarUI_Memoria();
 
     let prefixoModo = document.querySelector('input[name="modo_acao"]:checked').value.toUpperCase() + "_";
     
-    uiAlert("📄 Preparando Arquivos", 
-        "Sua planilha atualizada e o Relatório (LOG) serão baixados agora.<br><br><b>Atenção:</b> O seu navegador pode pedir permissão para baixar vários arquivos. Clique em <b>Permitir</b>.", 
+    uiAlert("📄 Preparando Arquivo ZIP", 
+        "Suas planilhas e o relatório estão sendo compactados. O download começará em instantes de forma 100% segura.", 
         false, 
         async () => {
-            // 1. Prepara o conteúdo do LOG primeiro (muito rápido)
+            const zip = new JSZip();
+
+            // 1. Cria o arquivo de texto (LOG) dentro do ZIP
             let txt = `=========================================\nRELATÓRIO EAN MASTER PRO: ${plataformaAtual.toUpperCase()}\nLoja: ${bancoLojas[lojaAtivaId].nome}\nData: ${dataAtual.toLocaleString()}\n=========================================\n\n`;
             for (let id in logPorProduto) {
                 txt += `Produto Pai ID: ${id}\n`;
                 logPorProduto[id].forEach(v => txt += `  - Var ID: ${v.var}  ->  EAN: ${v.ean}\n`);
                 txt += `\n`;
             }
-            
-            const baixarO_Log = () => {
-                const link = document.createElement("a");
-                link.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain' }));
-                link.download = `LOG_${plataformaAtual.toUpperCase()}_${carimbo}.txt`;
-                link.click();
-            };
+            zip.file(`LOG_${plataformaAtual.toUpperCase()}_${carimbo}.txt`, txt);
 
-            // 2. Dispara os downloads quase que instantaneamente
+            // 2. Adiciona a(s) planilha(s) preenchida(s) dentro do ZIP
             if (plataformaAtual !== 'mercadolivre') {
                 let nomeBase = originalFileName.substring(0, originalFileName.lastIndexOf('.'));
                 let extensao = originalFileName.substring(originalFileName.lastIndexOf('.'));
-                baixarArquivoLocal(await originalWorkbook.xlsx.writeBuffer(), `${prefixoModo}${nomeBase}_${carimbo}${extensao}`);
-                
-                setTimeout(baixarO_Log, 300); // Apenas 0.3 segundos de intervalo
+                const buffer = await originalWorkbook.xlsx.writeBuffer();
+                zip.file(`${prefixoModo}${nomeBase}_${carimbo}${extensao}`, buffer);
             } else {
-                baixarArquivoLocal(await mlWorkbookFicha.xlsx.writeBuffer(), `${prefixoModo}ML_FICHA_${carimbo}.xlsx`);
+                const bufferFicha = await mlWorkbookFicha.xlsx.writeBuffer();
+                zip.file(`${prefixoModo}ML_FICHA_${carimbo}.xlsx`, bufferFicha);
                 
-                setTimeout(async () => {
-                    baixarArquivoLocal(await mlWorkbookFiscais.xlsx.writeBuffer(), `${prefixoModo}ML_FISCAIS_${carimbo}.xlsx`);
-                }, 300);
-                
-                setTimeout(baixarO_Log, 600); // 0.6 segundos depois pro Log
+                const bufferFiscais = await mlWorkbookFiscais.xlsx.writeBuffer();
+                zip.file(`${prefixoModo}ML_FISCAIS_${carimbo}.xlsx`, bufferFiscais);
             }
+
+            // 3. Gera o arquivo final e força apenas UM download (Agora com Nome da Loja e Plataforma)
+            zip.generateAsync({type:"blob"}).then(function(content) {
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(content);
+                
+                // Formata o nome da loja removendo espaços e adicionando a plataforma
+                const nomeDaLojaLimpo = bancoLojas[lojaAtivaId].nome.replace(/\s+/g, '_');
+                const nomeDaPlataforma = plataformaAtual.toUpperCase();
+                
+                a.download = `EAN_MASTER_${nomeDaLojaLimpo}_${nomeDaPlataforma}_${carimbo}.zip`;
+                a.click();
+            });
         }
     );
 }

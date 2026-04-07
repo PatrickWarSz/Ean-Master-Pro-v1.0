@@ -145,3 +145,57 @@ th { background-color: #f8fafc; color: #475569; font-weight: 800; position: stic
 .badge-erro { background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
 .badge-buscando { background-color: #e0f2fe; color: #0284c7; }
 .badge-offline { background-color: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; }
+
+.toggle-password {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    font-size: 18px;
+    user-select: none;
+    opacity: 0.6;
+    transition: 0.2s;
+}
+.toggle-password:hover { opacity: 1; }
+
+/* Estilo para quando o botão está processando */
+.btn-loading {
+    pointer-events: none;
+    opacity: 0.7;
+    position: relative;
+}
+.btn-loading::after {
+    content: "...";
+    animation: dots 1.5s infinite;
+}
+@keyframes dots { 0% { content: "."; } 33% { content: ".."; } 66% { content: "..."; } }
+
+/* ================= TELA DE LOGIN PROFISSIONAL ================= */
+.auth-container { max-width: 450px !important; margin: 40px auto; padding: 0 !important; overflow: hidden; }
+
+/* Abas */
+.auth-tabs { display: flex; border-bottom: 1px solid var(--borda); background: #f8fafc; border-radius: 16px 16px 0 0; }
+.auth-tab { flex: 1; padding: 18px; border: none; background: transparent; font-weight: 800; color: var(--texto-secundario); cursor: pointer; transition: 0.3s; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;}
+.auth-tab.ativa { color: var(--shopee-laranja); border-bottom: 3px solid var(--shopee-laranja); background: white; }
+.auth-tab:hover:not(.ativa) { background: #e2e8f0; color: #0f172a; }
+
+/* Formulários e Animação */
+.auth-form { padding: 35px; opacity: 0; transform: translateX(20px); transition: all 0.3s ease; }
+.auth-form.ativo { opacity: 1; transform: translateX(0); animation: slideIn 0.4s forwards; }
+
+@keyframes slideIn { 
+    from { opacity: 0; transform: translateX(15px); } 
+    to { opacity: 1; transform: translateX(0); } 
+}
+
+/* Botão Google */
+.btn-google { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: white; border: 2px solid #e2e8f0; border-radius: 8px; font-weight: bold; color: #334155; cursor: pointer; transition: 0.2s; font-size: 14px; margin-bottom: 25px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+.btn-google:hover { background: #f8fafc; border-color: #cbd5e1; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+.btn-google:active { transform: translateY(0); }
+.btn-google img { width: 22px; height: 22px; }
+
+/* Divisor Visual (O "OU") */
+.divisor { display: flex; align-items: center; text-align: center; margin-bottom: 25px; color: #94a3b8; font-size: 11px; font-weight: 800; }
+.divisor::before, .divisor::after { content: ''; flex: 1; border-bottom: 1px solid #e2e8f0; }
+.divisor span { padding: 0 15px; }

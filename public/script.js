@@ -960,16 +960,30 @@ async function verificarNoBanco() {
                 });
                 
                 if (res.status === 200) { 
-                    ean = obterProximoEanLivre(); filaDeInjecao[i].eanGerado = ean; 
+                    // EAN Existe: Recalcula
+                    ean = obterProximoEanLivre(); 
+                    filaDeInjecao[i].eanGerado = ean; 
                     linhas[i].querySelector('.codigo-ean').innerText = ean;
                     celulaStatus.innerHTML = `<span class="badge badge-buscando">🔄 Recalculando...</span>`;
                     await new Promise(r => setTimeout(r, 600));
-                } else {
+                } 
+                else if (res.status === 404) {
+                    // 404 Not Found: EAN não existe no banco (LIVRE!)
                     filaDeInjecao[i].statusValidacao = 'aprovado';
                     celulaStatus.innerHTML = `<span class="badge badge-livre">Livre</span>`;
                     processado = true;
+                } 
+                else {
+                    // Erro de API (401 sem permissão, 429 limite excedido, 500 erro do proxy)
+                    isPausadoManual = true; // Pausa a automação para não estragar a lista
+                    document.getElementById('btnPausar').innerHTML = "▶️ Retomar Validação";
+                    document.getElementById('btnPausar').classList.add('modo-retomar');
+                    uiAlert("🚨 Erro na API do Cosmos", `A conexão falhou (Erro ${res.status}).\n\nVerifique se a sua Chave da API está correta em "Engrenagem > API" ou se você atingiu o limite de consultas diárias. O sistema foi pausado.`);
+                    await new Promise(r => setTimeout(r, 2000)); // Evita loop infinito de alertas
                 }
-            } catch (e) { await new Promise(r => setTimeout(r, 2000)); }
+            } catch (e) { 
+                await new Promise(r => setTimeout(r, 2000)); 
+            }
         }
         validadosConcluidos++;
     }

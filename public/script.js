@@ -283,6 +283,11 @@ function carregarCofreLojas() {
                     bancoLojas = dadosNuvem.bancoLojas;
                     lojaAtivaId = dadosNuvem.lojaAtivaId || lojaAtivaId;
                     
+                    // ⬇️ CARREGA O COFRE GLOBAL DA NUVEM ⬇️
+                    if (dadosNuvem.historicoGlobalEans) {
+                        historicoGlobalEans = new Set(dadosNuvem.historicoGlobalEans);
+                    }
+                    
                     // Salva a versão da nuvem no PC atual
                     localStorage.setItem('ean_master_lojas', JSON.stringify(bancoLojas));
                     localStorage.setItem('ean_master_loja_ativa', lojaAtivaId);
@@ -312,13 +317,15 @@ function salvarCofreLojas() {
         // Usamos update para substituir inteiramente o objeto bancoLojas no Firebase
         docRef.update({
             bancoLojas: bancoLojas,
-            lojaAtivaId: lojaAtivaId
+            lojaAtivaId: lojaAtivaId,
+            historicoGlobalEans: Array.from(historicoGlobalEans) // 🛡️ GUARDA O COFRE NA NUVEM
         }).catch(error => {
             // Se der erro porque o documento ainda não existe (primeiro acesso), usamos o set
             if (error.code === 'not-found') {
                 docRef.set({
                     bancoLojas: bancoLojas,
-                    lojaAtivaId: lojaAtivaId
+                    lojaAtivaId: lojaAtivaId,
+                    historicoGlobalEans: Array.from(historicoGlobalEans) // 🛡️ GUARDA O COFRE NA NUVEM
                 });
             } else {
                 console.log("Aviso: Falha ao sincronizar na nuvem.", error);
@@ -519,6 +526,7 @@ let mlWorkbookFiscais = null;
 let todosProdutos = []; 
 let filaDeInjecao = []; 
 let setEansExistentesGlobal = new Set(); 
+let historicoGlobalEans = new Set(); // 🛡️ NOSSO NOVO COFRE GLOBAL ANTI-DUPLICADOS
 
 function limparWorkspace() {
     document.getElementById('fileUpload').value = "";
@@ -863,7 +871,8 @@ function obterProximoEanLivre() {
         novoEan = b12 + calcularDigitoVerificador(b12);
         sequenciaGlobalAtual++; 
         
-        if (!setEansExistentesGlobal.has(novoEan)) {
+        // 🛡️ VERIFICA SE O EAN ESTÁ LIVRE NA PLANILHA ATUAL E SE NUNCA FOI USADO NA HISTÓRIA DA CONTA
+        if (!setEansExistentesGlobal.has(novoEan) && !historicoGlobalEans.has(novoEan)) {
             setEansExistentesGlobal.add(novoEan);
             eanValido = true;
         }
@@ -1013,6 +1022,8 @@ async function exportarPlanilha() {
 
     filaDeInjecao.forEach(item => {
         if (item.statusValidacao === 'aprovado' || item.statusValidacao === 'offline') {
+            historicoGlobalEans.add(item.eanGerado); // 🛡️ TRANCA O NOVO EAN NO COFRE GLOBAL PARA SEMPRE
+            
             if (item.plataforma !== 'mercadolivre') {
                 originalWorksheet.getCell(item.rowNum, item.colEan).value = String(item.eanGerado);
                 if (item.plataforma === 'tiktok' && item.colGtinType && item.colGtinType !== -1) {
